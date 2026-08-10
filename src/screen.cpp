@@ -1,7 +1,12 @@
 #include "screen.h"
 #include "constants.h"
-#include <SPI.h>
 #include <algorithm>
+
+#ifdef SIMULATOR
+#include "host/frame.h"
+#else
+#include <SPI.h>
+#endif
 
 #define TIMER_INTERVAL_US 200
 #define GRAY_LEVELS 64 // must be a power of two
@@ -17,7 +22,7 @@ void Screen_::setBrightness(uint8_t brightness, bool shouldStore)
 {
   brightness_ = brightness;
 
-#ifndef ESP8266
+#if !defined(ESP8266) && !defined(SIMULATOR)
   pinMode(PIN_ENABLE, OUTPUT);
   digitalWrite(PIN_ENABLE, LOW);
 #endif
@@ -253,6 +258,12 @@ IRAM_ATTR void Screen_::_render()
 {
   const auto buf = (currentStatus == UPDATE) ? renderBuffer_ : getRotatedRenderBuffer();
 
+#ifdef SIMULATOR
+  // The simulator has no shift registers to clock out to. Hand the rotated,
+  // brightness-scaled frame to the TUI instead of PWM-dithering it over SPI.
+  simPublishFrame(buf, brightness_);
+#else
+
   // SPI data needs to be 32-bit aligned, round up before divide
   static unsigned long
       spi_bits[(ROWS * COLS + 8 * sizeof(unsigned long) - 1) / 8 / sizeof(unsigned long)] = {0};
@@ -288,6 +299,7 @@ IRAM_ATTR void Screen_::_render()
 #ifdef ESP8266
   timer1_write(100);
 #endif
+#endif // SIMULATOR
 }
 
 void Screen_::drawLine(int x1, int y1, int x2, int y2, int ledStatus, uint8_t brightness)

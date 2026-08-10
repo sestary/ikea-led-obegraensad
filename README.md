@@ -12,6 +12,7 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
 ## Table of Contents
 
 - [Features](#features)
+- [Simulator](#simulator)
 - [Quick Start](#quick-start)
 - [Hardware Setup](#hardware-setup)
   - [Opening the Lamp](#opening-the-lamp)
@@ -74,6 +75,23 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
 - Pong Clock
 
 </details>
+
+## Simulator
+
+Preview the effects in your terminal before touching a soldering iron:
+
+```bash
+make -C sim && ./sim/build/obegraensad-sim
+```
+
+It compiles the real plugin sources natively, so what you see matches the
+device — including panel rotation, which is worth checking before you decide
+whether to hang the lamp landscape or portrait.
+
+See [`sim/README.md`](sim/README.md) for keys, headless mode and how to develop
+new effects.
+
+---
 
 ## Quick Start
 

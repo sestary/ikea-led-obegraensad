@@ -1,0 +1,61 @@
+# Native simulator build. No CMake, no third-party dependencies.
+#
+# Compiles the real firmware sources against the host shim in shim/, so effects
+# behave exactly as they do on the device.
+
+ROOT      := ..
+CXX       ?= c++
+CXXFLAGS  := -std=gnu++17 -O2 -Wall -DSIMULATOR \
+             -I$(ROOT)/include -Ishim -Ihost -Itui -I.
+BUILD     := build
+
+FIRMWARE_SRC := $(ROOT)/src/screen.cpp \
+                $(ROOT)/src/signs.cpp \
+                $(ROOT)/src/PluginManager.cpp \
+                $(ROOT)/src/scheduler.cpp \
+                $(ROOT)/src/config.cpp
+
+# DDPPlugin and ArtNet render whatever an external controller pushes over UDP,
+# so they have no effect of their own to preview.
+PLUGIN_SRC := $(filter-out %/DDPPlugin.cpp %/ArtNet.cpp, \
+                $(wildcard $(ROOT)/src/plugins/*.cpp))
+
+SIM_SRC := $(wildcard shim/*.cpp) $(wildcard host/*.cpp) $(wildcard tui/*.cpp)
+
+CORE_SRC := $(FIRMWARE_SRC) $(PLUGIN_SRC) $(SIM_SRC)
+CORE_OBJ := $(patsubst %.cpp,$(BUILD)/%.o,$(subst $(ROOT)/,root_/,$(CORE_SRC)))
+
+BIN := $(BUILD)/obegraensad-sim
+
+.PHONY: all test run clean
+all: $(BIN)
+
+$(BUILD)/root_/%.o: $(ROOT)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD)/%.o: %.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BIN): $(CORE_OBJ) $(BUILD)/main_sim.o
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+run: $(BIN)
+	./$(BIN)
+
+TEST_SRC := $(wildcard tests/*.cpp)
+TEST_BIN := $(patsubst tests/%.cpp,$(BUILD)/tests/%,$(TEST_SRC))
+
+$(BUILD)/tests/%: tests/%.cpp $(CORE_OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -Itests $< $(CORE_OBJ) -o $@
+
+test: $(TEST_BIN)
+	@rc=0; for t in $(TEST_BIN); do \
+	  echo "== $$t"; ./$$t || rc=1; \
+	done; exit $$rc
+
+clean:
+	rm -rf $(BUILD)

@@ -203,10 +203,10 @@ void BreakoutPlugin::loop()
 {
   switch (this->gameState)
   {
-  case this->GAME_STATE_LEVEL:
+  case GAME_STATE_LEVEL:
     this->newLevel();
     break;
-  case this->GAME_STATE_RUNNING:
+  case GAME_STATE_RUNNING:
     this->updateBall();
     this->updatePaddle();
 #ifdef ESP32
@@ -215,7 +215,7 @@ void BreakoutPlugin::loop()
     delay(random(100, 200));
 #endif
     break;
-  case this->GAME_STATE_END:
+  case GAME_STATE_END:
     this->initGame();
     break;
   }

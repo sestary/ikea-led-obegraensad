@@ -60,6 +60,14 @@ public:
 
   void setup();
 
+#ifdef SIMULATOR
+  // Lets the simulator drive a render pass. On hardware this is the timer ISR.
+  void render()
+  {
+    _render();
+  }
+#endif
+
   void loadFromStorage();
   void persist();
   uint8_t getBufferIndex(int index);

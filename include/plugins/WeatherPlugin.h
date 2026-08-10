@@ -1,5 +1,12 @@
 #pragma once
 
+#ifdef SIMULATOR
+// Host stubs: the simulator serves a canned forecast so the icon selection and
+// drawing code below still run unmodified.
+#include <HTTPClient.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#endif
 #ifdef ESP32
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
