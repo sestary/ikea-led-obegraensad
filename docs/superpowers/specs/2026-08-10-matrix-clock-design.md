@@ -31,8 +31,13 @@ Minutes sit flush to the bottom row rather than at `ROWS/2`, which fills the
 panel edge to edge and opens the gap between the two rows from one to two —
 matching the weather screen's spacing.
 
-Horizontally the digits are packed proportionally — one blank column between
-them — and each row centred, matching how the temperature is set.
+Horizontally the digits are packed proportionally and each row centred,
+matching how the temperature is set. The gap scales with the glyph: two blank
+columns between the 7px time digits, one between the 3px temperature digits.
+
+A single column between the big digits reads as cramped, and makes the widest
+pair span 15px, which centres onto lopsided 0/1 margins. At two columns the
+widest pair is exactly 16px and fills the panel evenly.
 
 Only the digit `1` is narrow: 4px against 7px for every other digit, on
 `drawBigNumbers`' 8px cell pitch. On that fixed grid the `1` sits hard against

@@ -47,11 +47,14 @@ static void test_time_mask_is_flush_top_and_bottom() {
   CHECK(bottomRow); // minutes reach row 15
 }
 
-// The time is packed proportionally, like the temperature: digits sit one
-// blank column apart and each row is centred. Only the digit 1 is narrow (4px
-// against 7px), so it is the case that matters.
+// The time is packed proportionally: digits sit TIME_GAP blank columns apart
+// and each row is centred. The gap is 2 rather than 1 because the big digits
+// are 7px wide - a single column between them reads as cramped, and the widest
+// pair then spans 15px, leaving lopsided 0/1 margins. At 2 the widest pair is
+// exactly 16px and fills the panel.
+static constexpr int TIME_GAP = 2;
 static void test_time_digits_are_proportional() {
-  const int times[][2] = {{11, 38}, {23, 59}, {10, 8}};
+  const int times[][2] = {{11, 38}, {23, 59}, {10, 8}, {26, 38}};
 
   for (const auto &t : times) {
     bool mask[TOTAL_PIXELS];
@@ -62,7 +65,7 @@ static void test_time_digits_are_proportional() {
       const int value = t[half];
       Glyph a = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value / 10}); });
       Glyph b = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value % 10}); });
-      const int wantWidth = a.width + 1 + b.width;
+      const int wantWidth = a.width + TIME_GAP + b.width;
 
       int lo = COLS, hi = -1;
       for (int y = 0; y < ROWS; y++) {

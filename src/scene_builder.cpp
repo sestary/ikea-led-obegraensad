@@ -7,8 +7,11 @@ namespace
 constexpr int WEATHER_GAP = 2;
 // Blank columns between temperature glyphs.
 constexpr int TEMP_GAP = 1;
-// Blank columns between the big time digits.
-constexpr int TIME_GAP = 1;
+// Blank columns between the big time digits. Two rather than one: the big
+// digits are 7px wide, so a single column reads as cramped, and the widest pair
+// would span 15px and sit on lopsided 0/1 margins. At 2 the widest pair is
+// exactly 16px and fills the panel evenly.
+constexpr int TIME_GAP = 2;
 // The stock minusSymbol is 4px and reads heavy next to the small digits.
 constexpr int MINUS_WIDTH = 2;
 
