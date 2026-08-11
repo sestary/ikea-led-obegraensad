@@ -1,4 +1,5 @@
 #include "icons.h"
+#include "screen.h"
 
 #include <cmath>
 
@@ -129,6 +130,13 @@ void writeMax(uint8_t *mask, int index, int value)
 }
 } // namespace
 
+double effectivePixelAspect()
+{
+  // A quarter turn maps logical x onto the panel axis logical y used to sit on,
+  // so the two pitches trade places.
+  return (Screen.currentRotation & 1) ? (1.0 / PIXEL_ASPECT) : PIXEL_ASPECT;
+}
+
 void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
 {
   if (height <= 0)
@@ -192,7 +200,14 @@ void drawMoonIcon(uint8_t *mask, double illumination, bool waxing, int top, int 
   static const Mare maria[] = {
       {-0.34, -0.30, 0.30}, {0.20, -0.42, 0.22}, {0.32, 0.26, 0.26}, {-0.24, 0.40, 0.18}};
 
-  const double r = (height / 2.0) - 1.0; // margin: an inscribed disc reads as a blob
+  // Round on the wall, not in the buffer: the horizontal radius is the vertical
+  // one scaled by the pixel aspect, and both are capped to fit with a margin.
+  const double aspect = effectivePixelAspect();
+  const double maxRx = (COLS / 2.0) - 1.0;
+  const double maxRy = (height / 2.0) - 1.0;
+  const double ry = (maxRx / aspect < maxRy) ? (maxRx / aspect) : maxRy;
+  const double rx = ry * aspect;
+
   const double cx = (COLS - 1) / 2.0;
   const double cy = top + (height - 1) / 2.0;
   const double c = 1.0 - 2.0 * illumination;
@@ -213,8 +228,8 @@ void drawMoonIcon(uint8_t *mask, double illumination, bool waxing, int top, int 
         {
           const double px = x + (sx + 0.5) / SS - 0.5;
           const double py = row + (sy + 0.5) / SS - 0.5;
-          const double nx = (px - cx) / r;
-          const double ny = (py - cy) / r;
+          const double nx = (px - cx) / rx;
+          const double ny = (py - cy) / ry;
           if (nx * nx + ny * ny > 1.0)
           {
             continue;
