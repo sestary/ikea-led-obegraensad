@@ -30,6 +30,7 @@ private:
   {
     SCENE_TIME,
     SCENE_WEATHER,
+    SCENE_MOON,
     SCENE_COUNT
   };
 

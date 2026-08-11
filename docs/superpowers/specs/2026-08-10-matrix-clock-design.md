@@ -14,12 +14,16 @@ would fit only three columns across, which reads as sparse rather than dense.
 
 ## Scenes
 
-Two scenes, cycled forever, with a rain transition between each:
+Three scenes, cycled forever, with a rain transition between each:
 
-| # | Scene   | Built with                                                        |
-|---|---------|-------------------------------------------------------------------|
-| 1 | Time    | `drawBigNumbers` — HH across the top, MM flush to the bottom edge |
-| 2 | Weather | `drawWeather` icon above a centred temperature                    |
+| # | Scene   | Built with                                                            |
+|---|---------|-----------------------------------------------------------------------|
+| 1 | Time    | `drawBigNumbers` — HH across the top, MM flush to the bottom edge     |
+| 2 | Weather | a procedural icon above a centred temperature                         |
+| 3 | Moon    | the current phase, filling the panel                                  |
+
+The weather and moon scenes are skipped until a reading arrives, so the cycle
+runs time-only rather than raining onto an empty target.
 
 An earlier draft made the icon and the temperature separate scenes, on the
 reasoning that each would get the full panel. Rendering them proved that wrong:
@@ -61,6 +65,34 @@ A scene's target is a `bool[TOTAL_PIXELS]` mask. Each glyph is captured by:
 No glyph data is duplicated. The digits and icons are pixel-identical to Big
 Clock and Weather, and stay identical if those fonts ever change. This is the
 central design decision; everything else is animation on top of it.
+
+### Images are 8-bit
+
+The panel drives 64 grey levels by temporal PWM (`GRAY_LEVELS = 64`, a render
+pass every 200 µs on ESP32 giving ~78 Hz). 1-bit artwork throws that away, and
+at 16×16 the shading is what makes a circle read as a circle.
+
+Every image is therefore `uint8_t[TOTAL_PIXELS]`, and a locked pixel lights at
+its own value rather than a flat full brightness. Text and the stock bitmaps
+come out 0 or 255 either way; only the procedural artwork uses the range.
+
+One caveat: grey resolution scales with global brightness, since
+`scaledValue = value × brightness / 255`. At half brightness only 32 steps
+remain, so the moon's terminator bands on a dimmed lamp.
+
+### The artwork is procedural
+
+`icons.cpp` rasterises the weather icons and the moon from primitives — disc,
+box, capsule, sun, cloud, bolt — supersampled 6×6. Shapes are defined once in a
+16×9 reference box and scaled to whatever box the caller asks for.
+
+Two details that are not obvious and were each found by looking at the output:
+
+- **The sun's rays start at the disc's edge.** A gap between disc and rays
+  leaves a dark ring, which at this size reads as an eye rather than a sun.
+- **The moon's disc leaves a margin.** An inscribed disc spans all 16 columns
+  and reads as a blob filling the panel. Its unlit face is also drawn faintly,
+  so a new moon is a dark disc rather than a blank panel.
 
 ### Glyphs are unioned, never drawn over each other
 
@@ -146,7 +178,7 @@ rotation of its own. Doing so would rotate the image twice.
 | `HOLD_MS`         | 8000   |
 | `DISSOLVE_MS`     | 1200   |
 
-One full cycle — two scenes — is about 23 seconds.
+One full cycle — three scenes — is about 35 seconds.
 
 ## Shared weather store
 
@@ -181,6 +213,7 @@ runs time-only until data arrives.
 
 ## Files
 
+- Create `include/icons.h`, `src/icons.cpp`
 - Create `include/scene_builder.h`, `src/scene_builder.cpp`
 - Create `include/weather_store.h`, `src/weather_store.cpp`
 - Create `include/plugins/MatrixClockPlugin.h`, `src/plugins/MatrixClockPlugin.cpp`

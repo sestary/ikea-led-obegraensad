@@ -8,3 +8,8 @@ int simWeatherCode();
 int simWeatherCount();
 void simCycleWeather();
 const char *simWeatherLabel();
+
+// Moon, served from the same canned condition.
+int simMoonIllumination();       // 0..100
+const char *simMoonPhaseName();
+void simSetMoon(int illumination, bool waxing);

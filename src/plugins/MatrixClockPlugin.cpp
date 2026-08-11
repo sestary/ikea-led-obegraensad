@@ -37,6 +37,13 @@ void MatrixClockPlugin::buildTarget()
     return;
   }
 
+  if (scene == SCENE_MOON)
+  {
+    const WeatherReading reading = weatherStore.get();
+    buildMoonMask(target, reading.moonIllumination, reading.moonWaxing);
+    return;
+  }
+
   struct tm timeinfo;
   if (getLocalTime(&timeinfo))
   {
@@ -46,9 +53,9 @@ void MatrixClockPlugin::buildTarget()
 
 void MatrixClockPlugin::startScene(int nextScene)
 {
-  // Without a reading there is nothing to build, so skip straight past the
-  // weather scene rather than raining onto an empty target.
-  if (nextScene == SCENE_WEATHER && !weatherStore.hasData())
+  // Without a reading there is nothing to build, so skip the scenes that need
+  // one rather than raining onto an empty target.
+  if ((nextScene == SCENE_WEATHER || nextScene == SCENE_MOON) && !weatherStore.hasData())
   {
     nextScene = SCENE_TIME;
   }

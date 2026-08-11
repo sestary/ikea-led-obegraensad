@@ -21,8 +21,12 @@ struct JsonValue {
         return static_cast<T>(simWeatherTempC());
       if (std::strcmp(key, "weatherCode") == 0)
         return static_cast<T>(simWeatherCode());
+      if (std::strcmp(key, "moon_illumination") == 0)
+        return static_cast<T>(simMoonIllumination());
       return static_cast<T>(0);
     } else {
+      if (std::strcmp(key, "moon_phase") == 0)
+        return T{simMoonPhaseName()};
       return T{};
     }
   }

@@ -14,6 +14,11 @@ struct WeatherReading
 {
   int temperatureC = 0;
   int icon = 0; // index into weatherIcons
+
+  // Moon, from the same response: no extra request needed.
+  double moonIllumination = 0.0; // 0..1
+  bool moonWaxing = true;
+
   bool valid = false;
 };
 

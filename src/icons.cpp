@@ -189,7 +189,7 @@ void drawMoonIcon(uint8_t *mask, double illumination, bool waxing, int top, int 
   static const Mare maria[] = {
       {-0.34, -0.30, 0.30}, {0.20, -0.42, 0.22}, {0.32, 0.26, 0.26}, {-0.24, 0.40, 0.18}};
 
-  const double r = (height / 2.0) - 0.5; // margin: an inscribed disc reads as a blob
+  const double r = (height / 2.0) - 1.0; // margin: an inscribed disc reads as a blob
   const double cx = (COLS - 1) / 2.0;
   const double cy = top + (height - 1) / 2.0;
   const double c = 1.0 - 2.0 * illumination;

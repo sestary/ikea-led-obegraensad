@@ -185,6 +185,50 @@ static void test_temperature_is_centred() {
   CHECK(abs(leftMargin - rightMargin) <= 1);
 }
 
+// The moon is the reason the pipeline is 8-bit: a hard mask leaves the limb
+// and terminator stepped.
+static void test_moon_uses_many_shades() {
+  uint8_t mask[TOTAL_PIXELS];
+  std::memset(mask, 0, sizeof(mask));
+  buildMoonMask(mask, 0.62, true);
+
+  bool seen[256] = {false};
+  int distinct = 0;
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+    if (mask[i] > 0 && !seen[mask[i]]) {
+      seen[mask[i]] = true;
+      distinct++;
+    }
+  CHECK(distinct > 8);
+}
+
+// A new moon must not be a blank panel: the unlit face is drawn faintly so the
+// whole disc stays visible.
+static void test_new_moon_still_shows_the_disc() {
+  uint8_t mask[TOTAL_PIXELS];
+  std::memset(mask, 0, sizeof(mask));
+  buildMoonMask(mask, 0.01, true);
+
+  int lit = 0;
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+    if (mask[i] > 0)
+      lit++;
+  CHECK(lit > 100); // a disc, not a sliver
+}
+
+// The disc must not touch the panel edges, or a full moon reads as a blob
+// filling the panel rather than a circle.
+static void test_moon_leaves_a_margin() {
+  uint8_t mask[TOTAL_PIXELS];
+  std::memset(mask, 0, sizeof(mask));
+  buildMoonMask(mask, 1.0, true);
+
+  for (int x = 0; x < COLS; x++) {
+    CHECK_EQ((int)mask[x], 0);                          // top row clear
+    CHECK_EQ((int)mask[(ROWS - 1) * COLS + x], 0);      // bottom row clear
+  }
+}
+
 // --- plugin ----------------------------------------------------------------
 
 // The deadline guarantee: however the rain falls, the scene must complete.
@@ -371,6 +415,9 @@ int main() {
   RUN(test_negative_temperature_keeps_every_glyph);
   RUN(test_weather_mask_keeps_two_row_gap_for_every_icon);
   RUN(test_temperature_is_centred);
+  RUN(test_moon_uses_many_shades);
+  RUN(test_new_moon_still_shows_the_disc);
+  RUN(test_moon_leaves_a_margin);
   RUN(test_scene_completes_by_the_deadline);
   RUN(test_cycle_reaches_the_weather_scene);
   RUN(test_runs_without_weather_data);

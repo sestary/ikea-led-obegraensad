@@ -133,6 +133,15 @@ bool WeatherStore::fetch()
 
   reading_.temperatureC = round(doc["current_condition"][0]["temp_C"].as<float>());
   reading_.icon = iconForCode(doc["current_condition"][0]["weatherCode"].as<int>());
+
+  // wttr.in reports illumination as a percentage and the phase as a name; the
+  // name is only needed to tell a waxing moon from a waning one.
+  const int illum = doc["weather"][0]["astronomy"][0]["moon_illumination"].as<int>();
+  reading_.moonIllumination = (illum < 0 ? 0 : (illum > 100 ? 100 : illum)) / 100.0;
+
+  const String phase = doc["weather"][0]["astronomy"][0]["moon_phase"].as<String>();
+  reading_.moonWaxing = phase.find("Waning") == String::npos;
+
   reading_.valid = true;
 
   http.end();

@@ -21,7 +21,19 @@ Condition kConditions[] = {
 };
 
 int g_index = 0;
+
+int g_moonIllum = 62;
+bool g_moonWaxing = true;
 } // namespace
+
+int simMoonIllumination() { return g_moonIllum; }
+
+const char *simMoonPhaseName() { return g_moonWaxing ? "Waxing Gibbous" : "Waning Gibbous"; }
+
+void simSetMoon(int illumination, bool waxing) {
+  g_moonIllum = illumination < 0 ? 0 : (illumination > 100 ? 100 : illumination);
+  g_moonWaxing = waxing;
+}
 
 void simSetWeather(int tempC, int weatherCode) {
   kConditions[0].tempC = tempC;
