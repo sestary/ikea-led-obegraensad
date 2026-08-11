@@ -1,7 +1,7 @@
 # Matrix Clock — Design
 
 **Date:** 2026-08-10
-**Status:** Approved, ready for implementation planning
+**Status:** Implemented on branch `tui-simulator`
 
 ## Idea
 
@@ -14,20 +14,26 @@ would fit only three columns across, which reads as sparse rather than dense.
 
 ## Scenes
 
-Three scenes, cycled forever, with a rain transition between **every** one:
+Two scenes, cycled forever, with a rain transition between each:
 
-| # | Scene       | Built with                                            |
-|---|-------------|-------------------------------------------------------|
-| 1 | Time        | `drawBigNumbers` — HH on the top half, MM on the bottom |
-| 2 | Weather icon| `drawWeather` — full 16×16                              |
-| 3 | Temperature | `drawNumbers` plus `degreeSymbol` / `minusSymbol`      |
+| # | Scene   | Built with                                                        |
+|---|---------|-------------------------------------------------------------------|
+| 1 | Time    | `drawBigNumbers` — HH across the top, MM flush to the bottom edge |
+| 2 | Weather | `drawWeather` icon above a centred temperature                    |
 
-Icon and temperature are separate scenes rather than one shared screen. Each
-gets the full panel, and it yields one more rain transition.
+An earlier draft made the icon and the temperature separate scenes, on the
+reasoning that each would get the full panel. Rendering them proved that wrong:
+the icons are 5–8 rows tall and the temperature uses 5-row digits, so alone
+each leaves most of the panel dark. That is why `WeatherPlugin` already
+composes them onto one screen.
+
+Minutes sit flush to the bottom row rather than at `ROWS/2`, which fills the
+panel edge to edge and opens the gap between the two rows from one to two —
+matching the weather screen's spacing.
 
 ## Targets come from the firmware's own drawing code
 
-A scene's target is a `bool[TOTAL_PIXELS]` mask, produced by:
+A scene's target is a `bool[TOTAL_PIXELS]` mask. Each glyph is captured by:
 
 1. `Screen.clear()`
 2. call the existing helper (`drawBigNumbers`, `drawWeather`, …)
@@ -37,6 +43,31 @@ A scene's target is a `bool[TOTAL_PIXELS]` mask, produced by:
 No glyph data is duplicated. The digits and icons are pixel-identical to Big
 Clock and Weather, and stay identical if those fonts ever change. This is the
 central design decision; everything else is animation on top of it.
+
+### Glyphs are unioned, never drawn over each other
+
+`Screen_::drawCharacter` writes its blank columns as **zeros**, so two glyphs
+overlapping by even one column erase each other. This silently clipped the
+minus sign to 3px, and clipped the digits too once spacing tightened.
+
+Every composed image therefore captures each glyph separately and ORs the lit
+pixels into the mask. Overlap becomes harmless, and layout is driven by each
+glyph's measured ink extent rather than by the helpers' internal advance widths
+(`drawNumbers` insets its ink by 1px, `drawCharacter` insets the degree by 2px
+— modelling those was the source of repeated off-by-one errors).
+
+This lives in `scene_builder.h` / `scene_builder.cpp` as `captureGlyph`,
+`blitGlyph`, `composeRow`, `buildTimeMask`, `buildWeatherMask` and `paintMask`.
+
+### Weather screen layout
+
+Icon heights vary from 5 rows (clear, cloudy) to 8 (thunder, rain, snow), so a
+fixed position per condition cannot hold a consistent gap — the existing
+plugin leaves the tall icons only one blank row. The icon is measured, the
+temperature placed two rows below it, and the whole block centred vertically.
+The temperature is centred horizontally from its measured width. The minus sign
+is a deliberate 2px, narrower than the stock 4px `minusSymbol`, so `-12°` still
+clears both edges.
 
 ## Phases
 
@@ -91,7 +122,7 @@ rotation of its own. Doing so would rotate the image twice.
 | `HOLD_MS`         | 8000   |
 | `DISSOLVE_MS`     | 1200   |
 
-One full cycle is about 35 seconds.
+One full cycle — two scenes — is about 23 seconds.
 
 ## Shared weather store
 
@@ -102,16 +133,16 @@ move into a small shared store:
 ```cpp
 struct WeatherReading {
   int temperatureC;
-  int icon;      // index into weatherIcons
-  int iconY;
-  int tempY;
+  int icon;   // index into weatherIcons
   bool valid;
 };
 ```
 
 `WeatherStore` exposes `update()` (rate-limited HTTP fetch and parse),
-`get()`, and `hasData()`. `WeatherPlugin` is refactored to populate it and
-render from it; Matrix Clock reads it. Its on-device behaviour must not change.
+`get()`, and `hasData()`. `WeatherPlugin` is reduced to a renderer that reads
+the store, and now shares `buildWeatherMask`, so it gains the corrected
+spacing, centring and minus. It keeps its existing brightness of 100; Matrix
+Clock paints its locked pixels at full brightness.
 
 wttr.in needs no API key — the request is
 `https://wttr.in/{location}?format=j2&lang=en`. Sharing is about one update
@@ -121,11 +152,12 @@ In the simulator this comes free: the store goes through the same stubbed
 `HTTPClient`, so both plugins see the canned forecast and `w` cycles conditions
 for both.
 
-If the store has no reading yet, the weather scenes are skipped and the cycle
+If the store has no reading yet, the weather scene is skipped and the cycle
 runs time-only until data arrives.
 
 ## Files
 
+- Create `include/scene_builder.h`, `src/scene_builder.cpp`
 - Create `include/weather_store.h`, `src/weather_store.cpp`
 - Create `include/plugins/MatrixClockPlugin.h`, `src/plugins/MatrixClockPlugin.cpp`
 - Modify `src/plugins/WeatherPlugin.cpp` and its header — move fetch/cache to the store
@@ -141,7 +173,7 @@ simulated clock, so they are deterministic despite the rain using `random()`.
   deadline guarantee, and the most important test.
 - A scene's mask matches drawing the same content directly through `Screen`,
   proving the snapshot approach agrees with Big Clock and Weather.
-- Scenes advance in order and wrap: time → icon → temp → time.
+- The cycle reaches the weather scene and wraps back to the time.
 - DISSOLVE eventually clears every locked pixel.
 - With no weather reading, the cycle runs time-only and never stalls.
 - A full cycle runs without crashing or writing out of bounds.

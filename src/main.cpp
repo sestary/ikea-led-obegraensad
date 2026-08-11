@@ -33,6 +33,7 @@
 #include "plugins/FireworkPlugin.h"
 #include "plugins/GameOfLifePlugin.h"
 #include "plugins/LinesPlugin.h"
+#include "plugins/MatrixClockPlugin.h"
 #include "plugins/MatrixRainPlugin.h"
 #include "plugins/MeteorShowerPlugin.h"
 #include "plugins/PongClockPlugin.h"
@@ -210,6 +211,7 @@ void baseSetup()
   pluginManager.addPlugin(new PongClockPlugin());
   pluginManager.addPlugin(new TickingClockPlugin());
   pluginManager.addPlugin(new WeatherPlugin());
+  pluginManager.addPlugin(new MatrixClockPlugin());
   pluginManager.addPlugin(new AnimationPlugin());
   pluginManager.addPlugin(new DDPPlugin());
   pluginManager.addPlugin(new ArtNetPlugin());

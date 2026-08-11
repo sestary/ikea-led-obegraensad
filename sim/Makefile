@@ -13,7 +13,9 @@ FIRMWARE_SRC := $(ROOT)/src/screen.cpp \
                 $(ROOT)/src/signs.cpp \
                 $(ROOT)/src/PluginManager.cpp \
                 $(ROOT)/src/scheduler.cpp \
-                $(ROOT)/src/config.cpp
+                $(ROOT)/src/config.cpp \
+                $(ROOT)/src/scene_builder.cpp \
+                $(ROOT)/src/weather_store.cpp
 
 # DDPPlugin and ArtNet render whatever an external controller pushes over UDP,
 # so they have no effect of their own to preview.

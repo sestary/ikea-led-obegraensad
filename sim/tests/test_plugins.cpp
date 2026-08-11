@@ -11,7 +11,7 @@
 // crashing or writing outside the buffer.
 static void test_all_plugins_run_without_crashing() {
   simRegisterPlugins();
-  CHECK_EQ((int)pluginManager.getNumPlugins(), 28);
+  CHECK_EQ((int)pluginManager.getNumPlugins(), 29);
   for (Plugin *p : pluginManager.getAllPlugins()) {
     pluginManager.setActivePluginById(p->getId());
     pluginManager.setupActivePlugin();
