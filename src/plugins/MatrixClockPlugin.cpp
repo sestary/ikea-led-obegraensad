@@ -55,7 +55,6 @@ void MatrixClockPlugin::startScene(int nextScene)
 
   scene = nextScene;
   std::memset(locked, 0, sizeof(locked));
-  drops.clear();
   buildTarget();
 
   phase = PHASE_RAIN_IN;
@@ -115,20 +114,33 @@ void MatrixClockPlugin::lockEverything()
   std::memcpy(locked, target, sizeof(locked));
 }
 
-void MatrixClockPlugin::releaseLocked(unsigned long elapsed)
+void MatrixClockPlugin::scheduleDissolve()
 {
-  // Release top-down across the dissolve, so the image falls away.
-  const int releasedRows = (elapsed * (ROWS + 1)) / DISSOLVE_MS;
-
-  for (int y = 0; y < releasedRows && y < ROWS; y++)
+  // Bias downward through the image so it comes apart from the top, but jitter
+  // each pixel: releasing a whole row at once reads as the row being erased
+  // rather than falling.
+  for (int y = 0; y < ROWS; y++)
   {
     for (int x = 0; x < COLS; x++)
     {
       const int index = y * COLS + x;
-      if (locked[index])
+      const unsigned long base = (static_cast<unsigned long>(y) * DISSOLVE_MS) / (ROWS * 2);
+      releaseAt[index] = static_cast<uint16_t>(base + random(0, DISSOLVE_MS / 2));
+    }
+  }
+}
+
+void MatrixClockPlugin::releaseLocked(unsigned long elapsed)
+{
+  for (int y = 0; y < ROWS; y++)
+  {
+    for (int x = 0; x < COLS; x++)
+    {
+      const int index = y * COLS + x;
+      if (locked[index] && elapsed >= releaseAt[index])
       {
         locked[index] = false;
-        drops.push_back({static_cast<int8_t>(x), static_cast<int8_t>(y)});
+        drops.push_back({static_cast<int8_t>(x), static_cast<int8_t>(y), MAX_BRIGHTNESS});
       }
     }
   }
@@ -139,7 +151,10 @@ void MatrixClockPlugin::advanceDrops()
   for (size_t i = 0; i < drops.size();)
   {
     drops[i].y++;
-    if (drops[i].y >= ROWS)
+    drops[i].brightness =
+        drops[i].brightness > DROP_FADE ? drops[i].brightness - DROP_FADE : 0;
+
+    if (drops[i].y >= ROWS || drops[i].brightness == 0)
     {
       drops[i] = drops.back();
       drops.pop_back();
@@ -175,9 +190,10 @@ void MatrixClockPlugin::paint()
     }
   }
 
+  // Falling pixels keep the image's brightness so you see it break apart.
   for (const auto &drop : drops)
   {
-    Screen.setPixel(drop.x, drop.y, 1, RAIN_BRIGHTNESS);
+    Screen.setPixel(drop.x, drop.y, 1, drop.brightness);
   }
 
   paintMask(locked, MAX_BRIGHTNESS);
@@ -213,6 +229,7 @@ void MatrixClockPlugin::loop()
     advanceRain();
     if (elapsed >= HOLD_MS)
     {
+      scheduleDissolve();
       phase = PHASE_DISSOLVE;
       phaseStart = millis();
     }

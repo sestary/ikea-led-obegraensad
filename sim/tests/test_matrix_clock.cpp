@@ -11,6 +11,7 @@
 #include "sim_weather.h"
 #include <cstring>
 #include <string>
+#include <vector>
 
 static Plugin *matrixClock() {
   simRegisterPlugins();
@@ -218,6 +219,105 @@ static void test_runs_without_weather_data() {
   CHECK(litCount(simLatestFrame()) > 0);
 }
 
+// Captures exactly the first scene's dissolve: the frames after the target has
+// been fully assembled and is coming apart again, stopping before the next
+// scene starts. Anchoring on observed state rather than tick counts keeps this
+// robust to the rain-in finishing early.
+static std::vector<SimFrame> collectFirstDissolve(const bool *mask) {
+  Plugin *p = matrixClock();
+  pluginManager.setActivePluginById(p->getId());
+  pluginManager.setupActivePlugin();
+  Screen.setBrightness(MAX_BRIGHTNESS);
+  Screen.setCurrentRotation(0);
+
+  int total = 0;
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+    if (mask[i])
+      total++;
+
+  std::vector<SimFrame> frames;
+  bool peaked = false;
+  for (int i = 0; i < 300; i++) {
+    pluginManager.runActivePlugin();
+    simRenderTick();
+    SimFrame f = simLatestFrame();
+
+    int onTarget = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (mask[j] && f.px[j] == MAX_BRIGHTNESS)
+        onTarget++;
+
+    if (!peaked && total > 0 && onTarget == total) {
+      peaked = true;
+    } else if (peaked && onTarget < total) {
+      if (onTarget == 0)
+        break; // scene finished; anything later belongs to the next scene
+      frames.push_back(f);
+    }
+    simClockStep(50);
+  }
+  return frames;
+}
+
+static void timeMaskNow(bool *mask) {
+  std::memset(mask, 0, sizeof(bool) * TOTAL_PIXELS);
+  struct tm t;
+  getLocalTime(&t);
+  buildTimeMask(mask, t.tm_hour, t.tm_min);
+}
+
+// Released pixels must stay bright and travel, so they light positions the
+// target never lit. Painting them at rain brightness made the image look
+// erased rather than falling.
+static void test_dissolve_drops_fall_visibly() {
+  bool mask[TOTAL_PIXELS];
+  timeMaskNow(mask);
+  std::vector<SimFrame> frames = collectFirstDissolve(mask);
+  CHECK(!frames.empty());
+
+  // Background rain tops out at 90. A falling pixel starts near full and fades,
+  // so anything well above the rain at a position the target never lit must be
+  // a released pixel in flight.
+  const int RAIN_CEILING = 120;
+  int brightOffTarget = 0;
+  for (const SimFrame &f : frames)
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (!mask[j] && f.px[j] > RAIN_CEILING)
+        brightOffTarget++;
+
+  CHECK(brightOffTarget > 0);
+}
+
+// Releasing a whole row at once reads as erasure. Within the dissolve there
+// must be a row where some target pixels have let go and others have not.
+static void test_dissolve_crumbles_rather_than_erasing_rows() {
+  bool mask[TOTAL_PIXELS];
+  timeMaskNow(mask);
+  std::vector<SimFrame> frames = collectFirstDissolve(mask);
+  CHECK(!frames.empty());
+
+  bool sawPartialRow = false;
+  for (const SimFrame &f : frames) {
+    for (int y = 0; y < ROWS && !sawPartialRow; y++) {
+      int held = 0, released = 0;
+      for (int x = 0; x < COLS; x++) {
+        const int j = y * COLS + x;
+        if (!mask[j])
+          continue; // only target pixels can be held or released
+        if (f.px[j] == MAX_BRIGHTNESS)
+          held++;
+        else
+          released++;
+      }
+      if (held > 0 && released > 0)
+        sawPartialRow = true;
+    }
+    if (sawPartialRow)
+      break;
+  }
+  CHECK(sawPartialRow);
+}
+
 int main() {
   Screen.setup();
   RUN(test_time_mask_is_flush_top_and_bottom);
@@ -227,5 +327,7 @@ int main() {
   RUN(test_scene_completes_by_the_deadline);
   RUN(test_cycle_reaches_the_weather_scene);
   RUN(test_runs_without_weather_data);
+  RUN(test_dissolve_drops_fall_visibly);
+  RUN(test_dissolve_crumbles_rather_than_erasing_rows);
   TEST_MAIN_END;
 }

@@ -86,9 +86,15 @@ not a polish detail.
 **HOLD.** The locked mask is displayed. Rain continues behind it at low
 brightness so the panel never looks frozen.
 
-**DISSOLVE.** Locked pixels release progressively from the top row down. A
-released pixel becomes a falling drop that moves down one row per tick until it
-leaves the panel.
+**DISSOLVE.** Each locked pixel is given a release time biased down the image
+but jittered per pixel, so the picture crumbles rather than peeling off a row
+at a time — releasing whole rows together reads as the row being erased.
+
+A released pixel becomes a drop that keeps the image's brightness and fades as
+it falls, so you see the picture come apart. Painting drops at rain brightness
+makes them indistinguishable from the background and the image just seems to
+vanish. Drops survive the scene change and finish falling behind the next
+rain-in.
 
 The plugin repaints from its own state every tick rather than reading the screen
 buffer back and decaying it. Read-back happens once per scene, to build the
@@ -179,6 +185,10 @@ simulated clock, so they are deterministic despite the rain using `random()`.
 - A full cycle runs without crashing or writing out of bounds.
 - The locked frame at each rotation equals the rotation of the frame at
   rotation 0, confirming the plugin adds no rotation of its own.
+- During the dissolve, pixels brighter than the rain appear at positions the
+  target never lit — proving released pixels travel rather than disappearing.
+- During the dissolve, some row holds part of its target pixels while the rest
+  have let go, proving it crumbles rather than erasing rows.
 
 ## Out of scope
 

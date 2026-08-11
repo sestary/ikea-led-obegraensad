@@ -49,16 +49,24 @@ private:
     uint8_t length;
   };
 
+  // A pixel that has come loose from the image and is falling away. It keeps
+  // its brightness so the image visibly breaks apart, fading into the rain.
   struct Drop
   {
     int8_t x;
     int8_t y;
+    uint8_t brightness;
   };
+
+  // How much a falling pixel dims per tick.
+  static constexpr uint8_t DROP_FADE = 22;
 
   NonBlockingDelay timer;
   Column columns[COLS];
   bool target[TOTAL_PIXELS];
   bool locked[TOTAL_PIXELS];
+  // When each locked pixel lets go, in ms from the start of the dissolve.
+  uint16_t releaseAt[TOTAL_PIXELS];
   std::vector<Drop> drops;
 
   Phase phase;
@@ -72,6 +80,7 @@ private:
   void lockCrossedPixels();
   bool allTargetsLocked() const;
   void lockEverything();
+  void scheduleDissolve();
   void releaseLocked(unsigned long elapsed);
   void advanceDrops();
   void paint();
