@@ -64,6 +64,24 @@ buffer back and decaying it. Read-back happens once per scene, to build the
 mask. This keeps the animation deterministic and independent of what else has
 touched the buffer.
 
+## Orientation
+
+The effect works with the lamp hung landscape or portrait, and needs no
+orientation-specific code.
+
+Plugins draw in logical space; `currentRotation` is applied downstream in
+`Screen_::_render()` via `getRotatedRenderBuffer()`, as compensation for how the
+panel is physically mounted. Logical "down" is therefore the viewer's "down" at
+every rotation, so the rain falls downward in all four orientations. Tracing
+rotation 1, a drop moving down in logical space becomes a decreasing physical
+column, which is downward to a viewer looking at a panel hung rotated.
+
+The panel is square, so there is no aspect change between orientations either:
+the HH/MM stacking and the 16×16 icon lay out identically.
+
+The plugin must consequently never read `Screen.currentRotation` or apply any
+rotation of its own. Doing so would rotate the image twice.
+
 ## Timing
 
 | Constant          | Value  |
@@ -127,6 +145,8 @@ simulated clock, so they are deterministic despite the rain using `random()`.
 - DISSOLVE eventually clears every locked pixel.
 - With no weather reading, the cycle runs time-only and never stalls.
 - A full cycle runs without crashing or writing out of bounds.
+- The locked frame at each rotation equals the rotation of the frame at
+  rotation 0, confirming the plugin adds no rotation of its own.
 
 ## Out of scope
 
