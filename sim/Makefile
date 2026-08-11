@@ -52,10 +52,19 @@ $(BUILD)/tests/%: tests/%.cpp $(CORE_OBJ)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -Itests $< $(CORE_OBJ) -o $@
 
-test: $(TEST_BIN)
+# The pty test needs the binary: it drives the real TUI through a terminal,
+# which is the only place terminal-mode bugs are reachable.
+test: $(TEST_BIN) $(BIN)
 	@rc=0; for t in $(TEST_BIN); do \
 	  echo "== $$t"; ./$$t || rc=1; \
-	done; exit $$rc
+	done; \
+	if command -v python3 >/dev/null 2>&1; then \
+	  echo "== tests/test_tui_pty.py"; \
+	  python3 tests/test_tui_pty.py || rc=1; \
+	else \
+	  echo "== tests/test_tui_pty.py (skipped: no python3)"; \
+	fi; \
+	exit $$rc
 
 clean:
 	rm -rf $(BUILD)
