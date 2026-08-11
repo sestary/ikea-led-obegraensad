@@ -140,6 +140,13 @@ void pressHandler(BfButton *btn, BfButton::press_pattern_t pattern)
   case BfButton::SINGLE_PRESS:
     if (currentStatus != LOADING)
     {
+      // Give the active plugin first refusal: one that shows several screens
+      // uses the button to step through them. A long press still exits.
+      Plugin *active = pluginManager.getActivePlugin();
+      if (active != nullptr && active->buttonPressed())
+      {
+        break;
+      }
       Scheduler.clearSchedule();
       pluginManager.activateNextPlugin();
     }

@@ -266,34 +266,39 @@ static void test_scene_completes_by_the_deadline() {
   CHECK_EQ(present, expected);
 }
 
-static void test_cycle_reaches_the_weather_scene() {
+static void test_an_interlude_follows_the_clock() {
   simSetWeather(21, 113);
   Plugin *p = matrixClock();
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
 
-  uint8_t weatherMask[TOTAL_PIXELS];
+  uint8_t weatherMask[TOTAL_PIXELS], moonMask[TOTAL_PIXELS];
   std::memset(weatherMask, 0, sizeof(weatherMask));
+  std::memset(moonMask, 0, sizeof(moonMask));
   buildWeatherMask(weatherMask, 21, 2);
+  buildMoonMask(moonMask, simMoonIllumination() / 100.0, true);
 
-  bool sawWeather = false;
-  // One full scene is 2500 + 8000 + 1200 ms; run two of them.
-  for (int i = 0; i < 600 && !sawWeather; i++) {
+  // The picker is weighted, so which interlude comes up is not fixed - only
+  // that one does. One round is 30s clock plus 8s interlude.
+  bool sawInterlude = false;
+  for (int i = 0; i < 1200 && !sawInterlude; i++) {
     pluginManager.runActivePlugin();
     simRenderTick();
     SimFrame f = simLatestFrame();
-    int hits = 0, need = 0;
-    for (int j = 0; j < TOTAL_PIXELS; j++)
-      if (weatherMask[j] > 0) {
-        need++;
-        if (f.px[j] == weatherMask[j])
-          hits++;
-      }
-    if (need > 0 && hits == need)
-      sawWeather = true;
+    for (const uint8_t *m : {weatherMask, moonMask}) {
+      int hits = 0, need = 0;
+      for (int j = 0; j < TOTAL_PIXELS; j++)
+        if (m[j] > 0) {
+          need++;
+          if (f.px[j] == m[j])
+            hits++;
+        }
+      if (need > 0 && hits == need)
+        sawInterlude = true;
+    }
     simClockStep(50);
   }
-  CHECK(sawWeather);
+  CHECK(sawInterlude);
 }
 
 static void test_runs_without_weather_data() {
@@ -327,7 +332,8 @@ static std::vector<SimFrame> collectFirstDissolve(const uint8_t *mask) {
 
   std::vector<SimFrame> frames;
   bool peaked = false;
-  for (int i = 0; i < 300; i++) {
+  // rain-in 2.5s + clock hold 30s + dissolve 1.2s, at 50ms a tick
+  for (int i = 0; i < 900; i++) {
     pluginManager.runActivePlugin();
     simRenderTick();
     SimFrame f = simLatestFrame();
@@ -408,6 +414,83 @@ static void test_dissolve_crumbles_rather_than_erasing_rows() {
   CHECK(sawPartialRow);
 }
 
+// The clock is the resident screen: interludes are brief and never follow one
+// another, so the time must dominate a long run.
+static void test_time_dominates_the_cycle() {
+  simSetWeather(21, 113);
+  Plugin *p = matrixClock();
+  pluginManager.setActivePluginById(p->getId());
+  pluginManager.setupActivePlugin();
+
+  uint8_t timeMask[TOTAL_PIXELS];
+  timeMaskNow(timeMask);
+  int timeTotal = 0;
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+    if (timeMask[i] > 0)
+      timeTotal++;
+
+  int timeFrames = 0, frames = 0;
+  // Several full rounds: 30s clock plus 8s interlude, at 50ms a tick.
+  for (int i = 0; i < 4000; i++) {
+    pluginManager.runActivePlugin();
+    simRenderTick();
+    SimFrame f = simLatestFrame();
+    int hits = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (timeMask[j] > 0 && f.px[j] == timeMask[j])
+        hits++;
+    if (timeTotal > 0 && hits == timeTotal)
+      timeFrames++;
+    frames++;
+    simClockStep(50);
+  }
+  CHECK(frames > 0);
+  CHECK(timeFrames * 2 > frames); // the clock is up more than half the time
+}
+
+// The button steps the screens in order, so it is predictable by hand even
+// though the automatic picker is weighted and random.
+static void test_button_steps_through_the_screens() {
+  simSetWeather(21, 113);
+  Plugin *p = matrixClock();
+  pluginManager.setActivePluginById(p->getId());
+  pluginManager.setupActivePlugin();
+
+  uint8_t weatherMask[TOTAL_PIXELS];
+  std::memset(weatherMask, 0, sizeof(weatherMask));
+  buildWeatherMask(weatherMask, 21, 2);
+
+  CHECK(p->buttonPressed()); // consumed, so the lamp does not change plugin
+
+  // Let the weather rain in, then it must be the weather that assembled.
+  bool sawWeather = false;
+  for (int i = 0; i < 80 && !sawWeather; i++) {
+    pluginManager.runActivePlugin();
+    simRenderTick();
+    SimFrame f = simLatestFrame();
+    int hits = 0, need = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (weatherMask[j] > 0) {
+        need++;
+        if (f.px[j] == weatherMask[j])
+          hits++;
+      }
+    if (need > 0 && hits == need)
+      sawWeather = true;
+    simClockStep(50);
+  }
+  CHECK(sawWeather);
+}
+
+// A plugin that does not use the button must not swallow it, or the lamp
+// could never be changed by hand.
+static void test_other_plugins_do_not_consume_the_button() {
+  simRegisterPlugins();
+  for (Plugin *p : pluginManager.getAllPlugins())
+    if (std::string("Matrix Clock") != p->getName())
+      CHECK(!p->buttonPressed());
+}
+
 int main() {
   Screen.setup();
   RUN(test_time_mask_is_flush_top_and_bottom);
@@ -419,8 +502,11 @@ int main() {
   RUN(test_new_moon_still_shows_the_disc);
   RUN(test_moon_leaves_a_margin);
   RUN(test_scene_completes_by_the_deadline);
-  RUN(test_cycle_reaches_the_weather_scene);
+  RUN(test_an_interlude_follows_the_clock);
   RUN(test_runs_without_weather_data);
+  RUN(test_time_dominates_the_cycle);
+  RUN(test_button_steps_through_the_screens);
+  RUN(test_other_plugins_do_not_consume_the_button);
   RUN(test_dissolve_drops_fall_visibly);
   RUN(test_dissolve_crumbles_rather_than_erasing_rows);
   TEST_MAIN_END;

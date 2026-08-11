@@ -51,6 +51,35 @@ void MatrixClockPlugin::buildTarget()
   }
 }
 
+int MatrixClockPlugin::chooseNextScene() const
+{
+  // Always fall back to the clock, so an interlude is never followed by
+  // another one. Without a reading there is nothing else to show.
+  if (scene != SCENE_TIME || !weatherStore.hasData())
+  {
+    return SCENE_TIME;
+  }
+  return (random(10) < WEATHER_SHARE) ? SCENE_WEATHER : SCENE_MOON;
+}
+
+uint32_t MatrixClockPlugin::holdDuration() const
+{
+  return (scene == SCENE_TIME) ? HOLD_TIME_MS : HOLD_INTERLUDE_MS;
+}
+
+bool MatrixClockPlugin::buttonPressed()
+{
+  // Stepping by hand is deterministic, unlike the weighted picker, so the
+  // button walks the screens in order.
+  int next = (scene + 1) % SCENE_COUNT;
+  if ((next == SCENE_WEATHER || next == SCENE_MOON) && !weatherStore.hasData())
+  {
+    next = SCENE_TIME;
+  }
+  startScene(next);
+  return true;
+}
+
 void MatrixClockPlugin::startScene(int nextScene)
 {
   // Without a reading there is nothing to build, so skip the scenes that need
@@ -245,7 +274,7 @@ void MatrixClockPlugin::loop()
 
   case PHASE_HOLD:
     advanceRain();
-    if (elapsed >= HOLD_MS)
+    if (elapsed >= holdDuration())
     {
       scheduleDissolve();
       phase = PHASE_DISSOLVE;
@@ -259,7 +288,7 @@ void MatrixClockPlugin::loop()
     advanceDrops();
     if (elapsed >= DISSOLVE_MS)
     {
-      startScene((scene + 1) % SCENE_COUNT);
+      startScene(chooseNextScene());
     }
     break;
   }

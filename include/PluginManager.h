@@ -23,6 +23,13 @@ public:
 
   virtual void teardown();
   virtual void websocketHook(JsonDocument &request);
+
+  /**
+   * Offered the lamp's button before it changes plugin. Return true to consume
+   * the press; a long press still leaves the plugin, so there is always a way
+   * out.
+   */
+  virtual bool buttonPressed();
   virtual void setup() = 0;
   virtual void loop();
   virtual const char *getName() const = 0;

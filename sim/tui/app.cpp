@@ -62,6 +62,15 @@ void simAppHandleKey(SimAppState &s, char key) {
   case 'w':
     simCycleWeather();
     break;
+  case 'b': {
+    // The lamp's button. Plugins that show several screens step through them.
+    Plugin *active = pluginManager.getActivePlugin();
+    if (active != nullptr)
+    {
+      active->buttonPressed();
+    }
+    break;
+  }
   case 'q':
     s.quit = true;
     break;
@@ -124,7 +133,7 @@ int simRunApp() {
     out += simRenderSidebar(s.selected, 0,
                             static_cast<int>(pluginManager.getNumPlugins()));
     out += "\n j/k plugin  r rotate  +/- bright  space pause  s step  "
-           "[/] speed  w weather  q quit\n";
+           "[/] speed  w weather  b button  q quit\n";
 
     std::fwrite(out.data(), 1, out.size(), stdout);
     std::fflush(stdout);

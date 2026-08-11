@@ -36,8 +36,15 @@ private:
 
   static constexpr uint16_t TICK_MS = 50;
   static constexpr uint16_t RAIN_IN_MAX_MS = 2500;
-  static constexpr uint16_t HOLD_MS = 8000;
   static constexpr uint16_t DISSOLVE_MS = 1200;
+
+  // The clock is the resident screen; weather and the moon are interludes. At
+  // these holds the time is up roughly four fifths of the time.
+  static constexpr uint32_t HOLD_TIME_MS = 30000;
+  static constexpr uint32_t HOLD_INTERLUDE_MS = 8000;
+
+  // Out of ten interludes, how many are weather rather than the moon.
+  static constexpr int WEATHER_SHARE = 7;
 
   static constexpr uint8_t RAIN_BRIGHTNESS = 90;
   static constexpr uint8_t MAX_TRAIL_LENGTH = 6;
@@ -77,6 +84,8 @@ private:
   unsigned long phaseStart;
 
   void startScene(int nextScene);
+  int chooseNextScene() const;
+  uint32_t holdDuration() const;
   void buildTarget();
   void resetColumn(int index, bool startAbove);
   void advanceRain();
@@ -91,5 +100,6 @@ private:
 public:
   void setup() override;
   void loop() override;
+  bool buttonPressed() override;
   const char *getName() const override;
 };

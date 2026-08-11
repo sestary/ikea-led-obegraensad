@@ -30,6 +30,7 @@ CMake, no package manager, no third-party libraries.
 | `s`       | single-step one frame   |
 | `[` / `]` | clock speed 0.25×–4×    |
 | `w`       | cycle weather condition |
+| `b`       | press the lamp's button |
 | `q`       | quit                    |
 
 Rotation matters if you are deciding how to hang the panel: it runs the

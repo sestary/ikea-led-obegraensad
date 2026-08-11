@@ -5,7 +5,10 @@
 
 ROOT      := ..
 CXX       ?= c++
-CXXFLAGS  := -std=gnu++17 -O2 -Wall -DSIMULATOR \
+# -MMD -MP emit header dependencies. Without them a change to a header does not
+# rebuild the objects that include it, and a stale object with an out-of-date
+# vtable crashes rather than failing to compile.
+CXXFLAGS  := -std=gnu++17 -O2 -Wall -DSIMULATOR -MMD -MP \
              -I$(ROOT)/include -Ishim -Ihost -Itui -I.
 BUILD     := build
 
@@ -71,3 +74,5 @@ test: $(TEST_BIN) $(BIN)
 
 clean:
 	rm -rf $(BUILD)
+
+-include $(CORE_OBJ:.o=.d) $(BUILD)/main_sim.d $(TEST_BIN:=.d)

@@ -22,8 +22,28 @@ Three scenes, cycled forever, with a rain transition between each:
 | 2 | Weather | a procedural icon above a centred temperature                         |
 | 3 | Moon    | the current phase, filling the panel                                  |
 
-The weather and moon scenes are skipped until a reading arrives, so the cycle
-runs time-only rather than raining onto an empty target.
+The clock is the **resident** screen, not one stop in a rotation. It holds for
+30 seconds; then a single interlude appears for 8 seconds and the clock returns.
+Interludes never follow one another, so the time is up roughly four fifths of
+the time.
+
+Which interlude is weighted: **7 in 10 weather, 3 in 10 moon**. Weather changes
+through the day and is what you actually glance for; the moon is closer to
+decoration.
+
+The interludes are skipped until a reading arrives, so the cycle runs
+time-only rather than raining onto an empty target.
+
+### The lamp's button steps the screens
+
+`Plugin` gains a `buttonPressed()` hook. `pressHandler` in `main.cpp` offers a
+short press to the active plugin first, and only changes plugin if the press is
+declined — the base implementation declines, so every other plugin is
+unaffected. A long press still leaves the plugin, so there is always a way out.
+
+Stepping by hand walks time → weather → moon in order. The automatic picker is
+weighted and random, which is right when the lamp is left alone but wrong for a
+button: pressing it should do the same thing twice.
 
 An earlier draft made the icon and the temperature separate scenes, on the
 reasoning that each would get the full panel. Rendering them proved that wrong:
@@ -175,10 +195,12 @@ rotation of its own. Doing so would rotate the image twice.
 |-------------------|--------|
 | tick              | 50 ms  |
 | `RAIN_IN_MAX_MS`  | 2500   |
-| `HOLD_MS`         | 8000   |
 | `DISSOLVE_MS`     | 1200   |
 
-One full cycle — three scenes — is about 35 seconds.
+| `HOLD_TIME_MS`      | 30000  |
+| `HOLD_INTERLUDE_MS` | 8000   |
+
+One round — clock plus one interlude — is about 42 seconds.
 
 ## Shared weather store
 
