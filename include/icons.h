@@ -38,9 +38,16 @@ constexpr double PIXEL_ASPECT = 500.0 / 300.0;
 /** PIXEL_ASPECT for the current rotation, inverted on the quarter turns. */
 double effectivePixelAspect();
 
-/** Reference box the artwork is designed in. */
+/**
+ * Reference box the artwork is designed in, in units where both axes are the
+ * same physical length. It is nearly square because 16 columns and 9 rows of
+ * this panel are both about 30 cm.
+ *
+ * Shapes are defined here and mapped through PIXEL_ASPECT, so a circle in this
+ * box is a circle on the wall rather than in the buffer.
+ */
 constexpr int ICON_REF_W = 16;
-constexpr int ICON_REF_H = 9;
+constexpr int ICON_REF_H = 15;
 
 /**
  * Rasterise weather icon `icon` (an index into the same set weatherIcons uses)

@@ -80,44 +80,44 @@ bool cloud(Pt p, double cx, double cy, double s)
 
 bool bolt(Pt p, double cx, double cy)
 {
-  return capsule(p, cx + 0.9, cy - 0.2, cx - 0.5, cy + 1.5, 0.55) ||
-         capsule(p, cx - 0.5, cy + 1.4, cx + 0.7, cy + 1.4, 0.5) ||
-         capsule(p, cx + 0.7, cy + 1.3, cx - 0.7, cy + 3.1, 0.55);
+  return capsule(p, cx + 1.5, cy - 0.4, cx - 0.8, cy + 2.4, 0.85) ||
+         capsule(p, cx - 0.8, cy + 2.2, cx + 1.2, cy + 2.2, 0.80) ||
+         capsule(p, cx + 1.2, cy + 2.0, cx - 1.2, cy + 5.0, 0.85);
 }
 
-/** Shape membership in reference-box coordinates: 16 wide, 9 tall. */
+/** Shape membership in reference-box coordinates: 16 wide, 15 tall, square. */
 bool insideIcon(int icon, Pt p)
 {
   switch (icon)
   {
   case 2: // clear
-    return sun(p, 8.0, 4.5, 2.10, 2.10, 4.45);
+    return sun(p, 8.0, 7.5, 3.30, 3.30, 7.20);
 
   case 0: // cloudy
-    return cloud(p, 8.0, 4.2, 1.0);
+    return cloud(p, 8.0, 6.6, 1.80);
 
   case 3: // partly cloudy
-    return sun(p, 11.5, 2.8, 1.45, 1.45, 3.05) || cloud(p, 6.6, 5.2, 0.86);
+    return sun(p, 11.2, 4.6, 2.40, 2.40, 4.60) || cloud(p, 7.0, 9.0, 1.35);
 
   case 4: // rain
-    return cloud(p, 8.0, 3.1, 0.86) || capsule(p, 5.6, 6.6, 4.9, 8.4, 0.42) ||
-           capsule(p, 8.2, 6.6, 7.5, 8.4, 0.42) ||
-           capsule(p, 10.8, 6.6, 10.1, 8.4, 0.42);
+    return cloud(p, 8.0, 4.9, 1.50) || capsule(p, 5.4, 10.0, 4.4, 13.8, 0.70) ||
+           capsule(p, 8.2, 10.0, 7.2, 13.8, 0.70) ||
+           capsule(p, 11.0, 10.0, 10.0, 13.8, 0.70);
 
   case 5: // snow
-    return cloud(p, 8.0, 3.1, 0.86) || disc(p, 5.3, 7.2, 0.62) ||
-           disc(p, 8.0, 7.9, 0.62) || disc(p, 10.7, 7.2, 0.62);
+    return cloud(p, 8.0, 4.9, 1.50) || disc(p, 5.0, 11.0, 1.05) ||
+           disc(p, 8.0, 13.2, 1.05) || disc(p, 11.0, 11.0, 1.05);
 
   case 1: // thunder
-    return cloud(p, 8.0, 2.9, 0.84) || bolt(p, 8.0, 5.4);
+    return cloud(p, 8.0, 4.6, 1.45) || bolt(p, 8.0, 8.8);
 
   case 6: // fog
-    return capsule(p, 3.4, 2.2, 12.0, 2.2, 0.72) ||
-           capsule(p, 4.6, 4.3, 13.0, 4.3, 0.72) ||
-           capsule(p, 3.0, 6.4, 11.4, 6.4, 0.72);
+    return capsule(p, 3.4, 3.4, 12.2, 3.4, 1.15) ||
+           capsule(p, 4.8, 7.5, 13.2, 7.5, 1.15) ||
+           capsule(p, 3.0, 11.6, 11.6, 11.6, 1.15);
 
   default:
-    return cloud(p, 8.0, 4.2, 1.0);
+    return cloud(p, 8.0, 6.6, 1.80);
   }
 }
 
@@ -144,10 +144,16 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
     return;
   }
 
-  // Uniform scale keeps circles round; the artwork is centred in the box.
-  const double scale = static_cast<double>(height) / ICON_REF_H;
-  const double drawnW = ICON_REF_W * scale;
-  const double offsetX = (COLS - drawnW) / 2.0;
+  // Work in physical units: one unit is a horizontal LED pitch, so a row is
+  // PIXEL_ASPECT units tall. A uniform scale in that space keeps circles round
+  // on the wall, which is not the same as round in the buffer.
+  const double aspect = effectivePixelAspect();
+  const double boxH = height * aspect;
+  const double scaleX = COLS / static_cast<double>(ICON_REF_W);
+  const double scaleY = boxH / static_cast<double>(ICON_REF_H);
+  const double scale = (scaleX < scaleY) ? scaleX : scaleY;
+  const double offsetX = (COLS - ICON_REF_W * scale) / 2.0;
+  const double offsetY = (boxH - ICON_REF_H * scale) / 2.0;
 
   for (int y = 0; y < height; y++)
   {
@@ -164,8 +170,8 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
         for (int sx = 0; sx < SS; sx++)
         {
           const double px = x + (sx + 0.5) / SS - 0.5;
-          const double py = y + (sy + 0.5) / SS - 0.5;
-          const Pt p = {(px - offsetX) / scale, py / scale};
+          const double py = (y + (sy + 0.5) / SS - 0.5) * aspect;
+          const Pt p = {(px - offsetX) / scale, (py - offsetY) / scale};
           if (p.x >= 0 && p.x <= ICON_REF_W && insideIcon(icon, p))
           {
             hits++;
