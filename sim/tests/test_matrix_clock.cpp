@@ -47,40 +47,39 @@ static void test_time_mask_is_flush_top_and_bottom() {
   CHECK(bottomRow); // minutes reach row 15
 }
 
-// Hours and minutes must sit on the same digit grid. Centring each row on its
-// own ink pulls them out of line, because digit widths differ - a "1" is
-// narrow and an "8" is wide.
-static void test_time_rows_share_the_digit_grid() {
-  const int times[][2] = {{11, 38}, {14, 32}, {10, 8}, {23, 59}};
+// The time is packed proportionally, like the temperature: digits sit one
+// blank column apart and each row is centred. Only the digit 1 is narrow (4px
+// against 7px), so it is the case that matters.
+static void test_time_digits_are_proportional() {
+  const int times[][2] = {{11, 38}, {23, 59}, {10, 8}};
 
   for (const auto &t : times) {
     bool mask[TOTAL_PIXELS];
     std::memset(mask, 0, sizeof(mask));
     buildTimeMask(mask, t[0], t[1]);
 
-    // Columns the firmware's own helper would use, drawn at the origin.
-    Glyph hh = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {t[0] / 10, t[0] % 10}); });
-    Glyph mm = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {t[1] / 10, t[1] % 10}); });
+    for (int half = 0; half < 2; half++) {
+      const int value = t[half];
+      Glyph a = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value / 10}); });
+      Glyph b = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value % 10}); });
+      const int wantWidth = a.width + 1 + b.width;
 
-    bool hoursCols[COLS] = {false}, minutesCols[COLS] = {false};
-    for (int y = 0; y < ROWS; y++)
-      for (int x = 0; x < COLS; x++)
-        if (mask[y * COLS + x]) {
-          if (y < ROWS / 2)
-            hoursCols[x] = true;
-          else
-            minutesCols[x] = true;
-        }
-
-    bool wantHours[COLS] = {false}, wantMinutes[COLS] = {false};
-    for (const auto &p : hh.px)
-      wantHours[hh.left + p.first] = true;
-    for (const auto &p : mm.px)
-      wantMinutes[mm.left + p.first] = true;
-
-    for (int x = 0; x < COLS; x++) {
-      CHECK_EQ((int)hoursCols[x], (int)wantHours[x]);
-      CHECK_EQ((int)minutesCols[x], (int)wantMinutes[x]);
+      int lo = COLS, hi = -1;
+      for (int y = 0; y < ROWS; y++) {
+        if ((y < ROWS / 2) != (half == 0))
+          continue;
+        for (int x = 0; x < COLS; x++)
+          if (mask[y * COLS + x]) {
+            if (x < lo)
+              lo = x;
+            if (x > hi)
+              hi = x;
+          }
+      }
+      CHECK(hi >= 0);
+      CHECK_EQ(hi - lo + 1, wantWidth);
+      // Centred, allowing one pixel where the leftover space is odd.
+      CHECK(abs(lo - (COLS - 1 - hi)) <= 1);
     }
   }
 }
@@ -359,7 +358,7 @@ static void test_dissolve_crumbles_rather_than_erasing_rows() {
 int main() {
   Screen.setup();
   RUN(test_time_mask_is_flush_top_and_bottom);
-  RUN(test_time_rows_share_the_digit_grid);
+  RUN(test_time_digits_are_proportional);
   RUN(test_negative_temperature_keeps_every_glyph);
   RUN(test_weather_mask_keeps_two_row_gap_for_every_icon);
   RUN(test_temperature_is_centred);

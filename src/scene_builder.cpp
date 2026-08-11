@@ -7,6 +7,8 @@ namespace
 constexpr int WEATHER_GAP = 2;
 // Blank columns between temperature glyphs.
 constexpr int TEMP_GAP = 1;
+// Blank columns between the big time digits.
+constexpr int TIME_GAP = 1;
 // The stock minusSymbol is 4px and reads heavy next to the small digits.
 constexpr int MINUS_WIDTH = 2;
 
@@ -24,6 +26,11 @@ Glyph minusGlyph()
 Glyph digitGlyph(int digit)
 {
   return captureGlyph([&] { Screen.drawNumbers(0, 0, {digit}); });
+}
+
+Glyph bigDigitGlyph(int digit)
+{
+  return captureGlyph([&] { Screen.drawBigNumbers(0, 0, {digit}); });
 }
 
 Glyph degreeGlyph()
@@ -79,15 +86,22 @@ void composeRow(bool *mask, const std::vector<GlyphItem> &items, int y, int gap)
 
 void buildTimeMask(bool *mask, int hours, int minutes)
 {
-  const Glyph hh =
-      captureGlyph([&] { Screen.drawBigNumbers(0, 0, {hours / 10, hours % 10}); });
-  const Glyph mm =
-      captureGlyph([&] { Screen.drawBigNumbers(0, 0, {minutes / 10, minutes % 10}); });
+  const std::vector<GlyphItem> hh = {{bigDigitGlyph(hours / 10), GLYPH_TOP},
+                                     {bigDigitGlyph(hours % 10), GLYPH_TOP}};
+  const std::vector<GlyphItem> mm = {{bigDigitGlyph(minutes / 10), GLYPH_TOP},
+                                     {bigDigitGlyph(minutes % 10), GLYPH_TOP}};
 
-  // Restore each row's original columns so the two share one digit grid; only
-  // the vertical placement changes, putting the minutes against the bottom.
-  blitGlyph(mask, hh, hh.left, 0);
-  blitGlyph(mask, mm, mm.left, ROWS - mm.height);
+  int minutesHeight = 0;
+  for (const auto &item : mm)
+  {
+    if (item.glyph.height > minutesHeight)
+    {
+      minutesHeight = item.glyph.height;
+    }
+  }
+
+  composeRow(mask, hh, 0, TIME_GAP);
+  composeRow(mask, mm, ROWS - minutesHeight, TIME_GAP);
 }
 
 void buildWeatherMask(bool *mask, int temperatureC, int icon)

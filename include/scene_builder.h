@@ -102,8 +102,10 @@ void composeRow(bool *mask, const std::vector<GlyphItem> &items, int y, int gap)
 /**
  * Hours across the top, minutes flush to the bottom edge.
  *
- * Both rows keep drawBigNumbers' own column grid: centring each row on its
- * measured ink pulls them out of line, because digit widths differ.
+ * Digits are packed proportionally and each row centred, matching the
+ * temperature. Only the digit 1 is narrow - 4px against 7px for the rest - so
+ * the row width changes with the digits and the time shifts slightly as the
+ * minutes tick. That is the accepted trade for the tighter setting.
  */
 void buildTimeMask(bool *mask, int hours, int minutes);
 

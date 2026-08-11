@@ -31,12 +31,18 @@ Minutes sit flush to the bottom row rather than at `ROWS/2`, which fills the
 panel edge to edge and opens the gap between the two rows from one to two —
 matching the weather screen's spacing.
 
-Horizontally both rows keep `drawBigNumbers`' own 8px cell grid, so the time
-occupies exactly the columns Big Clock uses. Centring each row on its measured
-ink instead pulls the rows out of line, because digit widths differ: a `1` is
-narrow and an `8` is wide. Measured centring is right for the temperature,
-which is a single free-standing row, and wrong for the time, which is two rows
-that must line up.
+Horizontally the digits are packed proportionally — one blank column between
+them — and each row centred, matching how the temperature is set.
+
+Only the digit `1` is narrow: 4px against 7px for every other digit, on
+`drawBigNumbers`' 8px cell pitch. On that fixed grid the `1` sits hard against
+the right of its cell, which leaves `11` looking gappy.
+
+The trade-off is accepted deliberately: because the row width changes with the
+digits (9px for `11`, 15px for `23`), the time shifts sideways as the minutes
+tick, and the two rows no longer share a column grid. A fixed grid would keep
+the time perfectly still — the usual reason clocks use tabular figures — but
+was judged to look worse here.
 
 ## Targets come from the firmware's own drawing code
 
