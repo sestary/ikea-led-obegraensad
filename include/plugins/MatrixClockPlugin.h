@@ -63,7 +63,9 @@ private:
 
   NonBlockingDelay timer;
   Column columns[COLS];
-  bool target[TOTAL_PIXELS];
+  // The target image is 8-bit so shaded artwork survives the rain: a locked
+  // pixel lights at its own value, not a flat full brightness.
+  uint8_t target[TOTAL_PIXELS];
   bool locked[TOTAL_PIXELS];
   // When each locked pixel lets go, in ms from the start of the dissolve.
   uint16_t releaseAt[TOTAL_PIXELS];

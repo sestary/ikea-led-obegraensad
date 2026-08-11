@@ -89,7 +89,7 @@ void MatrixClockPlugin::lockCrossedPixels()
         continue;
       }
       const int index = y * COLS + x;
-      if (target[index])
+      if (target[index] > 0)
       {
         locked[index] = true;
       }
@@ -101,7 +101,7 @@ bool MatrixClockPlugin::allTargetsLocked() const
 {
   for (int i = 0; i < TOTAL_PIXELS; i++)
   {
-    if (target[i] && !locked[i])
+    if (target[i] > 0 && !locked[i])
     {
       return false;
     }
@@ -111,7 +111,10 @@ bool MatrixClockPlugin::allTargetsLocked() const
 
 void MatrixClockPlugin::lockEverything()
 {
-  std::memcpy(locked, target, sizeof(locked));
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+  {
+    locked[i] = target[i] > 0;
+  }
 }
 
 void MatrixClockPlugin::scheduleDissolve()
@@ -140,7 +143,7 @@ void MatrixClockPlugin::releaseLocked(unsigned long elapsed)
       if (locked[index] && elapsed >= releaseAt[index])
       {
         locked[index] = false;
-        drops.push_back({static_cast<int8_t>(x), static_cast<int8_t>(y), MAX_BRIGHTNESS});
+        drops.push_back({static_cast<int8_t>(x), static_cast<int8_t>(y), target[index]});
       }
     }
   }
@@ -196,7 +199,15 @@ void MatrixClockPlugin::paint()
     Screen.setPixel(drop.x, drop.y, 1, drop.brightness);
   }
 
-  paintMask(locked, MAX_BRIGHTNESS);
+  // Locked pixels light at their own target value, which is what carries the
+  // shading in the procedural artwork.
+  for (int i = 0; i < TOTAL_PIXELS; i++)
+  {
+    if (locked[i] && target[i] > 0)
+    {
+      Screen.setPixelAtIndex(i, 1, target[i]);
+    }
+  }
 }
 
 void MatrixClockPlugin::loop()

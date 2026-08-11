@@ -14,6 +14,7 @@ FIRMWARE_SRC := $(ROOT)/src/screen.cpp \
                 $(ROOT)/src/PluginManager.cpp \
                 $(ROOT)/src/scheduler.cpp \
                 $(ROOT)/src/config.cpp \
+                $(ROOT)/src/icons.cpp \
                 $(ROOT)/src/scene_builder.cpp \
                 $(ROOT)/src/weather_store.cpp
 

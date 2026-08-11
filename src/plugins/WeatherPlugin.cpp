@@ -41,7 +41,7 @@ void WeatherPlugin::drawWeather()
 {
   const WeatherReading reading = weatherStore.get();
 
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   std::memset(mask, 0, sizeof(mask));
   buildWeatherMask(mask, reading.temperatureC, reading.icon);
 

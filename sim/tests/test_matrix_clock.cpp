@@ -32,7 +32,7 @@ static int litCount(const SimFrame &f) {
 // --- scene_builder ---------------------------------------------------------
 
 static void test_time_mask_is_flush_top_and_bottom() {
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   std::memset(mask, 0, sizeof(mask));
   buildTimeMask(mask, 14, 32);
 
@@ -57,7 +57,7 @@ static void test_time_digits_are_proportional() {
   const int times[][2] = {{11, 38}, {23, 59}, {10, 8}, {26, 38}};
 
   for (const auto &t : times) {
-    bool mask[TOTAL_PIXELS];
+    uint8_t mask[TOTAL_PIXELS];
     std::memset(mask, 0, sizeof(mask));
     buildTimeMask(mask, t[0], t[1]);
 
@@ -90,71 +90,77 @@ static void test_time_digits_are_proportional() {
 // Every glyph must survive composition. drawCharacter writes its blanks as
 // zeros, so overlapping glyphs used to erase each other.
 static void test_negative_temperature_keeps_every_glyph() {
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   std::memset(mask, 0, sizeof(mask));
   buildWeatherMask(mask, -12, 2);
 
-  // Count lit pixels on the temperature rows; compare against the glyphs drawn
-  // in isolation. Any clipping shows up as a shortfall.
-  Glyph minus, one, two, degree;
-  {
-    const std::vector<int> m = {0x00, 0xC0, 0x00};
-    minus = captureGlyph(
-        [&] { Screen.drawCharacter(0, 0, Screen.readBytes(m), 4, MAX_BRIGHTNESS); });
-    one = captureGlyph([&] { Screen.drawNumbers(0, 0, {1}); });
-    two = captureGlyph([&] { Screen.drawNumbers(0, 0, {2}); });
-    degree = captureGlyph([&] {
-      Screen.drawCharacter(0, 0, Screen.readBytes(degreeSymbol), 4, MAX_BRIGHTNESS);
-    });
-  }
-  const int expected = (int)(minus.px.size() + one.px.size() + two.px.size() + degree.px.size());
+  const std::vector<int> minusBits = {0x00, 0xC0, 0x00};
+  Glyph minus = captureGlyph(
+      [&] { Screen.drawCharacter(0, 0, Screen.readBytes(minusBits), 4, MAX_BRIGHTNESS); });
+  Glyph one = captureGlyph([&] { Screen.drawNumbers(0, 0, {1}); });
+  Glyph two = captureGlyph([&] { Screen.drawNumbers(0, 0, {2}); });
+  Glyph degree = captureGlyph([&] {
+    Screen.drawCharacter(0, 0, Screen.readBytes(degreeSymbol), 4, MAX_BRIGHTNESS);
+  });
+  const int expected =
+      (int)(minus.px.size() + one.px.size() + two.px.size() + degree.px.size());
 
-  int total = 0;
+  // The temperature occupies the lowest lit rows; count only those, since the
+  // icon above is procedural and anti-aliased.
+  int bottom = -1;
   for (int i = 0; i < TOTAL_PIXELS; i++)
-    if (mask[i])
-      total++;
+    if (mask[i] > 0)
+      bottom = i / COLS;
 
-  bool iconMask[TOTAL_PIXELS];
-  std::memset(iconMask, 0, sizeof(iconMask));
-  Glyph icon = captureGlyph([&] { Screen.drawWeather(0, 0, 2, MAX_BRIGHTNESS); });
+  int present = 0;
+  for (int y = bottom - 4; y <= bottom; y++)
+    for (int x = 0; x < COLS; x++)
+      if (y >= 0 && mask[y * COLS + x] > 0)
+        present++;
 
-  CHECK_EQ(total - (int)icon.px.size(), expected);
+  CHECK_EQ(present, expected);
 }
 
 static void test_weather_mask_keeps_two_row_gap_for_every_icon() {
   for (int icon = 0; icon < 7; icon++) {
-    bool mask[TOTAL_PIXELS];
+    uint8_t mask[TOTAL_PIXELS];
     std::memset(mask, 0, sizeof(mask));
     buildWeatherMask(mask, 21, icon);
 
-    // The mask is two blocks — icon above, temperature below — so the blank
-    // rows between the topmost and bottommost ink are exactly the gap.
     bool inked[ROWS] = {false};
     for (int y = 0; y < ROWS; y++)
       for (int x = 0; x < COLS; x++)
-        if (mask[y * COLS + x])
+        if (mask[y * COLS + x] > 0)
           inked[y] = true;
 
-    int first = -1, last = -1;
+    int bottom = -1;
     for (int y = 0; y < ROWS; y++)
-      if (inked[y]) {
-        if (first < 0)
-          first = y;
-        last = y;
-      }
+      if (inked[y])
+        bottom = y;
+    CHECK(bottom >= 0);
+
+    // The temperature is the lowest contiguous run of inked rows. Count the
+    // blank rows directly above it: the icons themselves have internal gaps
+    // (fog is three separate bars), so counting every blank row would not
+    // measure the separation.
+    int tempTop = bottom;
+    while (tempTop > 0 && inked[tempTop - 1])
+      tempTop--;
 
     int blanks = 0;
-    for (int y = first; y <= last; y++)
-      if (!inked[y])
-        blanks++;
+    int y = tempTop - 1;
+    while (y >= 0 && !inked[y]) {
+      blanks++;
+      y--;
+    }
 
-    CHECK(first >= 0);
+    CHECK(y >= 0); // there is artwork above the temperature
     CHECK_EQ(blanks, 2);
   }
 }
 
 static void test_temperature_is_centred() {
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   std::memset(mask, 0, sizeof(mask));
   buildWeatherMask(mask, 21, 2);
 
@@ -198,7 +204,7 @@ static void test_scene_completes_by_the_deadline() {
   pluginManager.runActivePlugin();
   simRenderTick();
 
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   std::memset(mask, 0, sizeof(mask));
   struct tm t;
   getLocalTime(&t);
@@ -222,7 +228,7 @@ static void test_cycle_reaches_the_weather_scene() {
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
 
-  bool weatherMask[TOTAL_PIXELS];
+  uint8_t weatherMask[TOTAL_PIXELS];
   std::memset(weatherMask, 0, sizeof(weatherMask));
   buildWeatherMask(weatherMask, 21, 2);
 
@@ -234,9 +240,9 @@ static void test_cycle_reaches_the_weather_scene() {
     SimFrame f = simLatestFrame();
     int hits = 0, need = 0;
     for (int j = 0; j < TOTAL_PIXELS; j++)
-      if (weatherMask[j]) {
+      if (weatherMask[j] > 0) {
         need++;
-        if (f.px[j] == MAX_BRIGHTNESS)
+        if (f.px[j] == weatherMask[j])
           hits++;
       }
     if (need > 0 && hits == need)
@@ -263,7 +269,7 @@ static void test_runs_without_weather_data() {
 // been fully assembled and is coming apart again, stopping before the next
 // scene starts. Anchoring on observed state rather than tick counts keeps this
 // robust to the rain-in finishing early.
-static std::vector<SimFrame> collectFirstDissolve(const bool *mask) {
+static std::vector<SimFrame> collectFirstDissolve(const uint8_t *mask) {
   Plugin *p = matrixClock();
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
@@ -299,8 +305,8 @@ static std::vector<SimFrame> collectFirstDissolve(const bool *mask) {
   return frames;
 }
 
-static void timeMaskNow(bool *mask) {
-  std::memset(mask, 0, sizeof(bool) * TOTAL_PIXELS);
+static void timeMaskNow(uint8_t *mask) {
+  std::memset(mask, 0, TOTAL_PIXELS);
   struct tm t;
   getLocalTime(&t);
   buildTimeMask(mask, t.tm_hour, t.tm_min);
@@ -310,7 +316,7 @@ static void timeMaskNow(bool *mask) {
 // target never lit. Painting them at rain brightness made the image look
 // erased rather than falling.
 static void test_dissolve_drops_fall_visibly() {
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   timeMaskNow(mask);
   std::vector<SimFrame> frames = collectFirstDissolve(mask);
   CHECK(!frames.empty());
@@ -331,7 +337,7 @@ static void test_dissolve_drops_fall_visibly() {
 // Releasing a whole row at once reads as erasure. Within the dissolve there
 // must be a row where some target pixels have let go and others have not.
 static void test_dissolve_crumbles_rather_than_erasing_rows() {
-  bool mask[TOTAL_PIXELS];
+  uint8_t mask[TOTAL_PIXELS];
   timeMaskNow(mask);
   std::vector<SimFrame> frames = collectFirstDissolve(mask);
   CHECK(!frames.empty());
