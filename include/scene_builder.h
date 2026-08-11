@@ -20,6 +20,10 @@ struct Glyph
   std::vector<std::pair<int8_t, int8_t>> px;
   int width = 0;
   int height = 0;
+  // Where the ink sat in the drawn image. Needed when a caller must preserve
+  // the helper's own grid rather than re-centring on the ink.
+  int left = 0;
+  int top = 0;
 };
 
 /**
@@ -60,6 +64,8 @@ Glyph captureGlyph(DrawFn draw)
 
   glyph.width = right - left + 1;
   glyph.height = bottom - top + 1;
+  glyph.left = left;
+  glyph.top = top;
   for (int y = top; y <= bottom; y++)
   {
     for (int x = left; x <= right; x++)
@@ -93,7 +99,12 @@ void blitGlyph(bool *mask, const Glyph &glyph, int x, int y);
 /** Union a row of glyphs into mask, centred horizontally, `gap` px apart. */
 void composeRow(bool *mask, const std::vector<GlyphItem> &items, int y, int gap);
 
-/** Hours across the top, minutes flush to the bottom edge. */
+/**
+ * Hours across the top, minutes flush to the bottom edge.
+ *
+ * Both rows keep drawBigNumbers' own column grid: centring each row on its
+ * measured ink pulls them out of line, because digit widths differ.
+ */
 void buildTimeMask(bool *mask, int hours, int minutes);
 
 /**

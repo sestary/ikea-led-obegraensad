@@ -84,8 +84,10 @@ void buildTimeMask(bool *mask, int hours, int minutes)
   const Glyph mm =
       captureGlyph([&] { Screen.drawBigNumbers(0, 0, {minutes / 10, minutes % 10}); });
 
-  blitGlyph(mask, hh, (COLS - hh.width) / 2, 0);
-  blitGlyph(mask, mm, (COLS - mm.width) / 2, ROWS - mm.height);
+  // Restore each row's original columns so the two share one digit grid; only
+  // the vertical placement changes, putting the minutes against the bottom.
+  blitGlyph(mask, hh, hh.left, 0);
+  blitGlyph(mask, mm, mm.left, ROWS - mm.height);
 }
 
 void buildWeatherMask(bool *mask, int temperatureC, int icon)

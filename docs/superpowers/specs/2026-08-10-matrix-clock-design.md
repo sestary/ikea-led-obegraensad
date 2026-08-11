@@ -31,6 +31,13 @@ Minutes sit flush to the bottom row rather than at `ROWS/2`, which fills the
 panel edge to edge and opens the gap between the two rows from one to two —
 matching the weather screen's spacing.
 
+Horizontally both rows keep `drawBigNumbers`' own 8px cell grid, so the time
+occupies exactly the columns Big Clock uses. Centring each row on its measured
+ink instead pulls the rows out of line, because digit widths differ: a `1` is
+narrow and an `8` is wide. Measured centring is right for the temperature,
+which is a single free-standing row, and wrong for the time, which is two rows
+that must line up.
+
 ## Targets come from the firmware's own drawing code
 
 A scene's target is a `bool[TOTAL_PIXELS]` mask. Each glyph is captured by:
