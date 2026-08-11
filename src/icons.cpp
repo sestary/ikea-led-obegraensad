@@ -43,8 +43,11 @@ bool capsule(Pt p, double x0, double y0, double x1, double y1, double r)
  * Sun: a disc with eight tapered rays.
  *
  * The rays start at the disc's edge rather than beyond it. A gap between the
- * two leaves a dark ring at this size, which reads as an eye or a flower
- * rather than a sun.
+ * two leaves a dark ring at this size, which reads as an eye rather than a sun.
+ *
+ * A larger core with shorter rays was tried and rejected: it makes the disc
+ * dominate, which is more literally a sun but reads flatter next to the moon.
+ * These proportions - a small core with long tapered rays - were chosen.
  */
 bool sun(Pt p, double cx, double cy, double core, double rayIn, double rayOut)
 {
