@@ -41,32 +41,37 @@ bool capsule(Pt p, double x0, double y0, double x1, double y1, double r)
 }
 
 /**
- * Sun: a disc with eight tapered rays.
+ * Sun: a solid disc inside a corona that falls away around it.
  *
- * The rays start at the disc's edge rather than beyond it. A gap between the
- * two leaves a dark ring at this size, which reads as an eye rather than a sun.
+ * Rays were tried in four arrangements - attached, detached, four cardinal and
+ * twelve fine - and every one turns to mush at this size. The corona says
+ * "this glows" through the panel's grey levels instead of through shape, which
+ * is what the hardware is actually good at.
  *
- * A larger core with shorter rays was tried and rejected: it makes the disc
- * dominate, which is more literally a sun but reads flatter next to the moon.
- * These proportions - a small core with long tapered rays - were chosen.
+ * It carries no rays at all, so it leans entirely on the falloff to read as a
+ * sun. That is what keeps it apart from the moon, whose disc is crisp-edged
+ * and carries maria.
+ *
+ * Returns 0..255 rather than a boolean, since the falloff is the whole point.
  */
-bool sun(Pt p, double cx, double cy, double core, double rayIn, double rayOut)
+int sunGlow(Pt p, double cx, double cy, double core, double coronaOut, int coronaPeak)
 {
-  if (disc(p, cx, cy, core))
-    return true;
-
   const double dx = p.x - cx, dy = p.y - cy;
   const double d = std::sqrt(dx * dx + dy * dy);
-  if (d < rayIn || d > rayOut)
-    return false;
 
-  double a = std::atan2(dy, dx);
-  if (a < 0)
-    a += 2 * PI_D;
-  const double seg = 2 * PI_D / 8;
-  const double off = std::fmod(a + seg / 2, seg) - seg / 2;
-  const double t = (d - rayIn) / (rayOut - rayIn);
-  return std::fabs(off) <= 0.30 * (1.0 - 0.60 * t);
+  if (d <= core)
+  {
+    return 255;
+  }
+  if (d >= coronaOut)
+  {
+    return 0;
+  }
+
+  // Squared falloff: linear leaves a visible edge where the corona stops.
+  const double t = (d - core) / (coronaOut - core);
+  const double falloff = (1.0 - t) * (1.0 - t);
+  return static_cast<int>(coronaPeak * falloff);
 }
 
 /** Cloud: three lobes over a flat base. */
@@ -90,14 +95,14 @@ bool insideIcon(int icon, Pt p)
 {
   switch (icon)
   {
-  case 2: // clear
-    return sun(p, 8.0, 7.5, 3.30, 3.30, 7.20);
+  case 2: // clear - handled by iconValue, which needs the falloff
+    return false;
 
   case 0: // cloudy
     return cloud(p, 8.0, 6.6, 1.80);
 
-  case 3: // partly cloudy
-    return sun(p, 11.2, 4.6, 2.40, 2.40, 4.60) || cloud(p, 7.0, 9.0, 1.35);
+  case 3: // partly cloudy - the sun is added by iconValue
+    return cloud(p, 7.0, 9.0, 1.35);
 
   case 4: // rain
     return cloud(p, 8.0, 4.9, 1.50) || capsule(p, 5.4, 10.0, 4.4, 13.8, 0.70) ||
@@ -119,6 +124,21 @@ bool insideIcon(int icon, Pt p)
   default:
     return cloud(p, 8.0, 6.6, 1.80);
   }
+}
+
+/** An icon's value at a point, 0..255. Most shapes are solid; the sun glows. */
+int iconValue(int icon, Pt p)
+{
+  if (icon == 2)
+  {
+    return sunGlow(p, 8.0, 7.5, 4.60, 7.40, 150);
+  }
+  if (icon == 3)
+  {
+    const int glow = sunGlow(p, 11.2, 4.6, 2.30, 4.40, 140);
+    return insideIcon(icon, p) ? 255 : glow;
+  }
+  return insideIcon(icon, p) ? 255 : 0;
 }
 
 void writeMax(uint8_t *mask, int index, int value)
@@ -164,7 +184,7 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
     }
     for (int x = 0; x < COLS; x++)
     {
-      int hits = 0;
+      int accumulated = 0;
       for (int sy = 0; sy < SS; sy++)
       {
         for (int sx = 0; sx < SS; sx++)
@@ -172,15 +192,16 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
           const double px = x + (sx + 0.5) / SS - 0.5;
           const double py = (y + (sy + 0.5) / SS - 0.5) * aspect;
           const Pt p = {(px - offsetX) / scale, (py - offsetY) / scale};
-          if (p.x >= 0 && p.x <= ICON_REF_W && insideIcon(icon, p))
+          if (p.x >= -1.0 && p.x <= ICON_REF_W + 1.0)
           {
-            hits++;
+            accumulated += iconValue(icon, p);
           }
         }
       }
-      if (hits > 0)
+      const int value = accumulated / (SS * SS);
+      if (value > 0)
       {
-        writeMax(mask, row * COLS + x, (hits * peak) / (SS * SS));
+        writeMax(mask, row * COLS + x, (value * peak) / MAX_BRIGHTNESS);
       }
     }
   }
