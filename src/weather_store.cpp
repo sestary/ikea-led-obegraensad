@@ -2,6 +2,7 @@
 #include "config.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 
 #ifdef SIMULATOR
@@ -131,22 +132,39 @@ bool WeatherStore::fetch()
     return false;
   }
 
-  reading_.temperatureC = round(doc["current_condition"][0]["temp_C"].as<float>());
-  reading_.icon = iconForCode(doc["current_condition"][0]["weatherCode"].as<int>());
+  // Built locally and published in one assignment at the end: on ESP32 this
+  // runs on the fetch task while the drawing task reads the store, and a
+  // half-updated reading would draw a new temperature beside an old icon.
+  WeatherReading out;
+  out.temperatureC = round(doc["current_condition"][0]["temp_C"].as<float>());
+  out.icon = iconForCode(doc["current_condition"][0]["weatherCode"].as<int>());
 
   // wttr.in reports illumination as a percentage and the phase as a name; the
   // name is only needed to tell a waxing moon from a waning one.
   const int illum = doc["weather"][0]["astronomy"][0]["moon_illumination"].as<int>();
-  reading_.moonIllumination = (illum < 0 ? 0 : (illum > 100 ? 100 : illum)) / 100.0;
+  out.moonIllumination = (illum < 0 ? 0 : (illum > 100 ? 100 : illum)) / 100.0;
 
   const String phase = doc["weather"][0]["astronomy"][0]["moon_phase"].as<String>();
-  reading_.moonWaxing = phase.find("Waning") == String::npos;
+  // strstr, not find/npos: Arduino's String has neither, and the simulator
+  // aliases String to std::string, so only the C string API compiles on both.
+  out.moonWaxing = strstr(phase.c_str(), "Waning") == nullptr;
 
-  reading_.valid = true;
+  out.valid = true;
+  reading_ = out;
 
   http.end();
   return true;
 }
+
+#ifdef ESP32
+void WeatherStore::fetchTask(void *param)
+{
+  WeatherStore *self = static_cast<WeatherStore *>(param);
+  self->fetch();
+  self->fetching_ = false;
+  vTaskDelete(nullptr);
+}
+#endif
 
 void WeatherStore::update()
 {
@@ -155,7 +173,29 @@ void WeatherStore::update()
     return;
   }
 
+#ifdef ESP32
+  // Never block the caller: plugins call this from their loop, which runs on
+  // screenDrawingTask. See fetchTask in the header for why that matters.
+  if (fetching_)
+  {
+    return;
+  }
+
+  everFetched_ = true;
+  lastUpdate_ = millis();
+  fetching_ = true;
+
+  // 12 KB: the mbedTLS handshake alone wants ~8 KB, and HTTPClient plus the
+  // JSON parse sit on top of it. Priority 1 keeps it below async_tcp, and
+  // leaving it unpinned lets the scheduler put it on whichever core is free.
+  if (xTaskCreate(fetchTask, "weatherFetch", 12288, this, 1, nullptr) != pdPASS)
+  {
+    Serial.println("[weather] could not start fetch task");
+    fetching_ = false;
+  }
+#else
   everFetched_ = true;
   lastUpdate_ = millis();
   fetch();
+#endif
 }

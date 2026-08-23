@@ -33,6 +33,14 @@ private:
 
   bool fetch();
 
+#ifdef ESP32
+  // fetch() blocks for up to 20 seconds inside the TLS handshake and read. Run
+  // on the caller's task that starves async_tcp, which is subscribed to the
+  // task watchdog, and the device panics and reboots - so it gets its own task.
+  static void fetchTask(void *param);
+  volatile bool fetching_ = false;
+#endif
+
 public:
   static WeatherStore &getInstance();
 
