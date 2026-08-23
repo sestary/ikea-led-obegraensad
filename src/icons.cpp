@@ -8,7 +8,7 @@ namespace
 // Subsamples per axis. 6x6 is enough to make the limb of a disc smooth at this
 // size, and keeps the per-scene cost small - icons are built once per scene,
 // not per frame.
-constexpr int SS = 6;
+constexpr int SUBSAMPLES = 6;
 
 constexpr double PI_D = 3.14159265358979323846;
 
@@ -185,12 +185,12 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
     for (int x = 0; x < COLS; x++)
     {
       int accumulated = 0;
-      for (int sy = 0; sy < SS; sy++)
+      for (int sy = 0; sy < SUBSAMPLES; sy++)
       {
-        for (int sx = 0; sx < SS; sx++)
+        for (int sx = 0; sx < SUBSAMPLES; sx++)
         {
-          const double px = x + (sx + 0.5) / SS - 0.5;
-          const double py = (y + (sy + 0.5) / SS - 0.5) * aspect;
+          const double px = x + (sx + 0.5) / SUBSAMPLES - 0.5;
+          const double py = (y + (sy + 0.5) / SUBSAMPLES - 0.5) * aspect;
           const Pt p = {(px - offsetX) / scale, (py - offsetY) / scale};
           if (p.x >= -1.0 && p.x <= ICON_REF_W + 1.0)
           {
@@ -198,7 +198,7 @@ void drawWeatherIcon(uint8_t *mask, int icon, int top, int height, uint8_t peak)
           }
         }
       }
-      const int value = accumulated / (SS * SS);
+      const int value = accumulated / (SUBSAMPLES * SUBSAMPLES);
       if (value > 0)
       {
         writeMax(mask, row * COLS + x, (value * peak) / MAX_BRIGHTNESS);
@@ -249,12 +249,12 @@ void drawMoonIcon(uint8_t *mask, double illumination, bool waxing, int top, int 
     for (int x = 0; x < COLS; x++)
     {
       int inDisc = 0, inLit = 0, inMare = 0;
-      for (int sy = 0; sy < SS; sy++)
+      for (int sy = 0; sy < SUBSAMPLES; sy++)
       {
-        for (int sx = 0; sx < SS; sx++)
+        for (int sx = 0; sx < SUBSAMPLES; sx++)
         {
-          const double px = x + (sx + 0.5) / SS - 0.5;
-          const double py = row + (sy + 0.5) / SS - 0.5;
+          const double px = x + (sx + 0.5) / SUBSAMPLES - 0.5;
+          const double py = row + (sy + 0.5) / SUBSAMPLES - 0.5;
           const double nx = (px - cx) / rx;
           const double ny = (py - cy) / ry;
           if (nx * nx + ny * ny > 1.0)
@@ -284,7 +284,7 @@ void drawMoonIcon(uint8_t *mask, double illumination, bool waxing, int top, int 
         continue;
       }
 
-      const int total = SS * SS;
+      const int total = SUBSAMPLES * SUBSAMPLES;
       const int unlit = inDisc - inLit;
       double v = (unlit * dim + inLit * peak) / static_cast<double>(total);
       v -= (static_cast<double>(inMare) / total) * (peak - dim) * 0.42;
