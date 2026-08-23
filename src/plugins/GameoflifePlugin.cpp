@@ -128,7 +128,7 @@ void GameOfLifePlugin::loop()
 {
   switch (this->state)
   {
-  case this->STATE_RUNNING:
+  case STATE_RUNNING:
     if (updateTimer.isReady(gol_delay))
     {
       this->show();
@@ -150,16 +150,16 @@ void GameOfLifePlugin::loop()
       }
     }
     break;
-  case this->STATE_END_DELAY:
+  case STATE_END_DELAY:
     if (updateTimer.isReady(gol_delay * 4))
     {
       this->state = this->STATE_END;
     }
     break;
-  case this->STATE_INIT:
+  case STATE_INIT:
     this->init();
     break;
-  case this->STATE_END:
+  case STATE_END:
     this->state = this->STATE_INIT;
     this->initStep = 0;
     break;

@@ -15,6 +15,11 @@ int Plugin::getId() const
   return id;
 }
 
+bool Plugin::buttonPressed()
+{
+  return false;
+}
+
 void Plugin::teardown()
 {
 }

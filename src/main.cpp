@@ -33,6 +33,7 @@
 #include "plugins/FireworkPlugin.h"
 #include "plugins/GameOfLifePlugin.h"
 #include "plugins/LinesPlugin.h"
+#include "plugins/MatrixClockPlugin.h"
 #include "plugins/MatrixRainPlugin.h"
 #include "plugins/MeteorShowerPlugin.h"
 #include "plugins/PongClockPlugin.h"
@@ -139,6 +140,13 @@ void pressHandler(BfButton *btn, BfButton::press_pattern_t pattern)
   case BfButton::SINGLE_PRESS:
     if (currentStatus != LOADING)
     {
+      // Give the active plugin first refusal: one that shows several screens
+      // uses the button to step through them. A long press still exits.
+      Plugin *active = pluginManager.getActivePlugin();
+      if (active != nullptr && active->buttonPressed())
+      {
+        break;
+      }
       Scheduler.clearSchedule();
       pluginManager.activateNextPlugin();
     }
@@ -210,6 +218,7 @@ void baseSetup()
   pluginManager.addPlugin(new PongClockPlugin());
   pluginManager.addPlugin(new TickingClockPlugin());
   pluginManager.addPlugin(new WeatherPlugin());
+  pluginManager.addPlugin(new MatrixClockPlugin());
   pluginManager.addPlugin(new AnimationPlugin());
   pluginManager.addPlugin(new DDPPlugin());
   pluginManager.addPlugin(new ArtNetPlugin());

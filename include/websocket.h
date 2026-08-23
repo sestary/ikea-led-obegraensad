@@ -2,6 +2,13 @@
 
 #include "constants.h"
 
+#ifdef SIMULATOR
+#include <string>
+// The simulator has no websocket. Plugins that push state to the web UI still
+// need this to link; the shim discards the message.
+void sendWSMessage(std::string &message);
+#endif
+
 #ifdef ENABLE_SERVER
 #include <ESPAsyncWebServer.h>
 

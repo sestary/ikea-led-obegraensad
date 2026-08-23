@@ -3,7 +3,10 @@
 #include <Arduino.h>
 
 // disable if you do not want to have online functionality
+// the native simulator build has no networking stack
+#ifndef SIMULATOR
 #define ENABLE_SERVER
+#endif
 
 #ifdef ESP32
 #define PIN_ENABLE 26
@@ -24,11 +27,12 @@
 // disable if you do not want to use the internal storage
 // https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/
 // timer1 on esp8266 is not compatible with flash file system reads
-#ifndef ESP8266
+#if !defined(ESP8266) && !defined(SIMULATOR)
 #define ENABLE_STORAGE
 #endif
 
-#ifdef ENABLE_SERVER
+// the simulator has no server but still reads the timezone for its clocks
+#if defined(ENABLE_SERVER) || defined(SIMULATOR)
 // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.json
 #define NTP_SERVER "de.pool.ntp.org"
 #define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
