@@ -44,8 +44,11 @@ void MatrixClockPlugin::buildTarget()
     return;
   }
 
+  // Timeout 0, not the 5 second default: this runs on screenDrawingTask, where
+  // blocking waits for NTP freeze the panel and starve async_tcp - the same way
+  // the weather fetch used to. Before the first sync there is no time to draw.
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo))
+  if (getLocalTime(&timeinfo, 0))
   {
     buildTimeMask(target, timeinfo.tm_hour, timeinfo.tm_min);
   }
