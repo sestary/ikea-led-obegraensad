@@ -34,9 +34,13 @@ private:
     SCENE_COUNT
   };
 
-  static constexpr uint16_t TICK_MS = 50;
-  static constexpr uint16_t RAIN_IN_MAX_MS = 2500;
-  static constexpr uint16_t DISSOLVE_MS = 1200;
+  // The rain advances one row per tick, so TICK_MS is what the falling speed
+  // is actually made of. The two deadlines below are wall clock, so they scale
+  // with it: leave them where they were and a slower tick would simply run out
+  // of time, snapping the rest of the mask on instead of raining it in.
+  static constexpr uint16_t TICK_MS = 75;
+  static constexpr uint16_t RAIN_IN_MAX_MS = 3750;
+  static constexpr uint16_t DISSOLVE_MS = 1800;
 
   // The clock is the resident screen; weather and the moon are interludes. At
   // these holds the time is up roughly four fifths of the time.
