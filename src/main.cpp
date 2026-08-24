@@ -182,7 +182,7 @@ void baseSetup()
   connectToWiFi();
 
   // set time server using config values
-  configTzTime(config.getTzInfo().c_str(), config.getNtpServer().c_str());
+  config.applyTimeConfig();
 
   initOTA(server);
   initWebsocketServer(server);

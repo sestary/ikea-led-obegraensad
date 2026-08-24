@@ -37,15 +37,16 @@ void MatrixClockPlugin::buildTarget()
     return;
   }
 
-  if (scene == SCENE_MOON)
-  {
-    const WeatherReading reading = weatherStore.get();
-    buildMoonMask(target, reading.moonIllumination, reading.moonWaxing);
-    return;
-  }
-
+  // 10ms, not the 5 second default: this runs on screenDrawingTask, where
+  // blocking waits for NTP freeze the panel and starve async_tcp - the same way
+  // the weather fetch used to. Before the first sync there is no time to draw.
+  //
+  // Not 0 either. getLocalTime loops on `(millis() - start) <= ms`, so a zero
+  // timeout returns false without ever reading the clock whenever the
+  // millisecond happens to tick over between those two statements - a synced
+  // clock that intermittently reports no time at all.
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo))
+  if (getLocalTime(&timeinfo, 10))
   {
     buildTimeMask(target, timeinfo.tm_hour, timeinfo.tm_min);
   }
@@ -53,26 +54,39 @@ void MatrixClockPlugin::buildTarget()
 
 int MatrixClockPlugin::chooseNextScene() const
 {
-  // Always fall back to the clock, so an interlude is never followed by
-  // another one. Without a reading there is nothing else to show.
+  // Two screens that take turns. Without a reading there is no weather to show,
+  // so the clock simply stays up.
   if (scene != SCENE_TIME || !weatherStore.hasData())
   {
     return SCENE_TIME;
   }
-  return (random(10) < WEATHER_SHARE) ? SCENE_WEATHER : SCENE_MOON;
+  return SCENE_WEATHER;
 }
 
-uint32_t MatrixClockPlugin::holdDuration() const
+bool MatrixClockPlugin::holdComplete(unsigned long elapsed) const
 {
-  return (scene == SCENE_TIME) ? HOLD_TIME_MS : HOLD_INTERLUDE_MS;
+  if (elapsed < MIN_HOLD_MS)
+  {
+    return false;
+  }
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 10))
+  {
+    // The weather owns :45 to :00, the time owns the rest, so each scene leaves
+    // exactly when the other's window opens.
+    const bool weatherWindow = timeinfo.tm_sec >= WEATHER_AT_SECOND;
+    return (scene == SCENE_TIME) ? weatherWindow : !weatherWindow;
+  }
+
+  // No synced clock, so nothing to pin to - fall back to taking turns.
+  return elapsed >= ((scene == SCENE_TIME) ? HOLD_TIME_MS : HOLD_INTERLUDE_MS);
 }
 
 bool MatrixClockPlugin::buttonPressed()
 {
-  // Stepping by hand is deterministic, unlike the weighted picker, so the
-  // button walks the screens in order.
   int next = (scene + 1) % SCENE_COUNT;
-  if ((next == SCENE_WEATHER || next == SCENE_MOON) && !weatherStore.hasData())
+  if (next == SCENE_WEATHER && !weatherStore.hasData())
   {
     next = SCENE_TIME;
   }
@@ -84,13 +98,20 @@ void MatrixClockPlugin::startScene(int nextScene)
 {
   // Without a reading there is nothing to build, so skip the scenes that need
   // one rather than raining onto an empty target.
-  if ((nextScene == SCENE_WEATHER || nextScene == SCENE_MOON) && !weatherStore.hasData())
+  if (nextScene == SCENE_WEATHER && !weatherStore.hasData())
   {
     nextScene = SCENE_TIME;
   }
 
   scene = nextScene;
   std::memset(locked, 0, sizeof(locked));
+
+  // The dissolve ends on a deadline, so pixels can still be mid-fall when it
+  // does. advanceDrops only runs during the dissolve while paint draws drops
+  // unconditionally, so any survivor would freeze on the panel and stay lit
+  // right through the next scene.
+  drops.clear();
+
   buildTarget();
 
   phase = PHASE_RAIN_IN;
@@ -99,12 +120,16 @@ void MatrixClockPlugin::startScene(int nextScene)
 
 void MatrixClockPlugin::advanceRain()
 {
+  // Draining runs the streams off the bottom for good, so they must not come
+  // back round the top the way they do for the rest of a scene.
+  const bool recycle = (phase != PHASE_DRAIN);
+
   for (int i = 0; i < COLS; i++)
   {
     columns[i].previousY = columns[i].y;
     columns[i].y += columns[i].speed;
 
-    if (columns[i].y - columns[i].length >= ROWS)
+    if (recycle && columns[i].y - columns[i].length >= ROWS)
     {
       resetColumn(i, false);
       columns[i].y = -static_cast<int8_t>(random(1, 6));
@@ -131,6 +156,20 @@ void MatrixClockPlugin::lockCrossedPixels()
       }
     }
   }
+}
+
+bool MatrixClockPlugin::rainDrained() const
+{
+  for (int i = 0; i < COLS; i++)
+  {
+    // Same test the recycler uses, so a column counts as gone at exactly the
+    // point it would otherwise have been sent back to the top.
+    if (columns[i].y - columns[i].length < ROWS)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool MatrixClockPlugin::allTargetsLocked() const
@@ -209,8 +248,10 @@ void MatrixClockPlugin::paint()
 {
   Screen.clear();
 
-  // Rain first, dim, so the message reads over it.
-  for (int x = 0; x < COLS; x++)
+  // Rain first, dim, so the message reads over it. Skipped through the hold:
+  // freezing the columns without also hiding them would leave stale trails
+  // sitting on top of the scene for its whole duration.
+  for (int x = 0; phase != PHASE_HOLD && x < COLS; x++)
   {
     for (int j = 0; j < columns[x].length; j++)
     {
@@ -267,15 +308,35 @@ void MatrixClockPlugin::loop()
     if (elapsed >= RAIN_IN_MAX_MS || allTargetsLocked())
     {
       lockEverything();
+      phase = PHASE_DRAIN;
+      phaseStart = millis();
+    }
+    break;
+
+  case PHASE_DRAIN:
+    advanceRain();
+    // A deadline as well as the drain test: a stream that is somehow never
+    // finished must not hold the scene open indefinitely.
+    if (rainDrained() || elapsed >= DRAIN_MAX_MS)
+    {
       phase = PHASE_HOLD;
       phaseStart = millis();
     }
     break;
 
   case PHASE_HOLD:
-    advanceRain();
-    if (elapsed >= holdDuration())
+    // No advanceRain here: the panel holds the scene clean, and the rain
+    // carries only the transitions in and out of it.
+    if (holdComplete(elapsed))
     {
+      // Bring the columns back in from above. Resuming them where they froze
+      // when the hold began would pop half-drawn trails into existence in the
+      // middle of the panel.
+      for (int i = 0; i < COLS; i++)
+      {
+        resetColumn(i, true);
+      }
+
       scheduleDissolve();
       phase = PHASE_DISSOLVE;
       phaseStart = millis();

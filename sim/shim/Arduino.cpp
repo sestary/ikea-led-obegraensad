@@ -42,7 +42,15 @@ void digitalWrite(int, int) {}
 int digitalRead(int) { return 0; }
 
 bool getLocalTime(struct tm *info, uint32_t) {
-  std::time_t now = std::time(nullptr);
+  // Driven by the simulated clock, not the host's. The clock plugins schedule
+  // themselves against the wall second, so reading host time here would leave
+  // them ignoring both the TUI's speed control and simClockStep - and any test
+  // that steps the clock would instead depend on what second it really is.
+  //
+  // Anchored so the panel still opens on a plausible local time.
+  static const std::time_t base =
+      std::time(nullptr) - static_cast<std::time_t>(simClockNow() / 1000);
+  const std::time_t now = base + static_cast<std::time_t>(simClockNow() / 1000);
   localtime_r(&now, info);
   return true;
 }

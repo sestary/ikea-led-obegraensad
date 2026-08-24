@@ -42,6 +42,33 @@ Glyph bigDigitGlyph(int digit)
   return captureGlyph([&] { Screen.drawBigNumbers(0, 0, {digit}); });
 }
 
+/**
+ * The monospace advance for the big digits: the widest of the ten.
+ *
+ * Measured across the whole set, not across the digits being shown, because
+ * that is what makes the setting monospace - a cell sized to the digits present
+ * would still shift when the minutes tick from 19 to 20.
+ *
+ * Cached: each probe clears and repaints the screen, and this is asked for on
+ * every scene build.
+ */
+int bigDigitCell()
+{
+  static int cell = 0;
+  if (cell == 0)
+  {
+    for (int digit = 0; digit <= 9; digit++)
+    {
+      const int width = bigDigitGlyph(digit).width;
+      if (width > cell)
+      {
+        cell = width;
+      }
+    }
+  }
+  return cell;
+}
+
 Glyph degreeGlyph()
 {
   return captureGlyph(
@@ -149,6 +176,29 @@ void composeRow(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int g
   }
 }
 
+void composeRowFixed(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap, int cell)
+{
+  const int count = static_cast<int>(items.size());
+  const int total = count > 0 ? (count * cell + (count - 1) * gap) : 0;
+  const int blockHeight = tallest(items);
+
+  int x = (COLS - total) / 2;
+  if (x < 0)
+  {
+    x = 0;
+  }
+
+  for (const auto &item : items)
+  {
+    const int dy = (item.align == GLYPH_TOP) ? 0 : (blockHeight - item.glyph.height) / 2;
+    // Centre the ink in its cell, so a narrow 1 sits under the digit it
+    // replaced rather than hard against the cell's left edge.
+    const int dx = (cell - item.glyph.width) / 2;
+    blitGlyph(mask, item.glyph, x + dx, y + dy);
+    x += cell + gap;
+  }
+}
+
 void buildTimeMask(uint8_t *mask, int hours, int minutes)
 {
   const std::vector<GlyphItem> hh = {{bigDigitGlyph(hours / 10), GLYPH_TOP},
@@ -156,8 +206,9 @@ void buildTimeMask(uint8_t *mask, int hours, int minutes)
   const std::vector<GlyphItem> mm = {{bigDigitGlyph(minutes / 10), GLYPH_TOP},
                                      {bigDigitGlyph(minutes % 10), GLYPH_TOP}};
 
-  composeRow(mask, hh, 0, TIME_GAP);
-  composeRow(mask, mm, ROWS - tallest(mm), TIME_GAP);
+  const int cell = bigDigitCell();
+  composeRowFixed(mask, hh, 0, TIME_GAP, cell);
+  composeRowFixed(mask, mm, ROWS - tallest(mm), TIME_GAP, cell);
 }
 
 void buildWeatherMask(uint8_t *mask, int temperatureC, int icon)
@@ -194,11 +245,6 @@ void buildWeatherMask(uint8_t *mask, int temperatureC, int icon)
     drawWeatherIcon(mask, icon, top - inkTop, ICON_BOX_H, MAX_BRIGHTNESS);
   }
   composeRow(mask, items, tempY, TEMP_GAP);
-}
-
-void buildMoonMask(uint8_t *mask, double illumination, bool waxing)
-{
-  drawMoonIcon(mask, illumination, waxing, 0, ROWS, MAX_BRIGHTNESS);
 }
 
 void paintMask(const uint8_t *mask, uint8_t scale)
