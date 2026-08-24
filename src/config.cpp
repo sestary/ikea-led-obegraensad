@@ -57,6 +57,18 @@ void Config::begin()
   Serial.println("[Config] ============================================");
 }
 
+void Config::applyTimeConfig()
+{
+#if defined(ENABLE_SERVER) && !defined(SIMULATOR)
+  // Static, and deliberately so. configTzTime passes this straight to
+  // sntp_setservername, which stores the pointer instead of copying the
+  // string - a temporary here would leave lwIP resolving freed memory.
+  static String server;
+  server = getNtpServer();
+  configTzTime(getTzInfo().c_str(), server.c_str());
+#endif
+}
+
 void Config::setDefaults()
 {
   // Use constants from constants.h as defaults

@@ -1,4 +1,5 @@
 #include "webhandler.h"
+#include "weather_store.h"
 #include "config.h"
 #include "messages.h"
 #include "scheduler.h"
@@ -307,6 +308,12 @@ void handleSetConfigBody(AsyncWebServerRequest *request,
     {
       Serial.println("[WebHandler] JSON parsed successfully");
       config.save();
+
+      // Apply straight away. Saving only wrote to storage, so the timezone
+      // stayed on whatever the device booted with until it was power cycled,
+      // and a new location waited out the rest of the 30 minute weather window.
+      config.applyTimeConfig();
+      weatherStore.forceRefresh();
       Serial.println("[WebHandler] ============================================");
       Serial.println("[WebHandler] Configuration Updated:");
       Serial.print("[WebHandler] Weather Location: ");

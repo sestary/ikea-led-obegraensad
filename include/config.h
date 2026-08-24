@@ -37,6 +37,16 @@ public:
   
   // Reset to hardcoded defaults
   void setDefaults();
+
+  /**
+   * Hand the NTP server and timezone to SNTP. Call after begin() and again
+   * whenever they change, or the device keeps using whatever it booted with.
+   *
+   * Keeps its own copy of the server name: sntp_setservername stores the
+   * pointer rather than copying the string, so a temporary would leave lwIP
+   * reading freed memory and no clock would ever sync.
+   */
+  void applyTimeConfig();
   
   // Getters (always return valid values)
   String getWeatherLocation() const;
