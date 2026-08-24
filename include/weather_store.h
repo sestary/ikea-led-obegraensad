@@ -15,10 +15,6 @@ struct WeatherReading
   int temperatureC = 0;
   int icon = 0; // index into weatherIcons
 
-  // Moon, from the same response: no extra request needed.
-  double moonIllumination = 0.0; // 0..1
-  bool moonWaxing = true;
-
   bool valid = false;
 };
 
@@ -49,6 +45,17 @@ public:
 
   /** Fetches at most every 30 minutes. Safe to call from a plugin loop. */
   void update();
+
+  /**
+   * Drop the rate limit so the next update() fetches.
+   *
+   * For when the location changes: without it a new city would not appear
+   * until the current 30 minute window expired.
+   */
+  void forceRefresh()
+  {
+    everFetched_ = false;
+  }
 
   bool hasData() const
   {

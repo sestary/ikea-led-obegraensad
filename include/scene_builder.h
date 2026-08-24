@@ -113,12 +113,21 @@ void blitGlyph(uint8_t *mask, const Glyph &glyph, int x, int y);
 void composeRow(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap);
 
 /**
+ * As composeRow, but every glyph advances by a fixed `cell` and is centred
+ * within it. Monospace: the row's width no longer depends on which glyphs are
+ * in it.
+ */
+void composeRowFixed(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap, int cell);
+
+/**
  * Hours across the top, minutes flush to the bottom edge.
  *
- * Digits are packed proportionally and each row centred, matching the
- * temperature. Only the digit 1 is narrow - 4px against 7px for the rest - so
- * the row width changes with the digits and the time shifts slightly as the
- * minutes tick. That is the accepted trade for the tighter setting.
+ * Digits are set monospace: each advances by the width of the widest of the
+ * ten, so the row stays put as the minutes tick. Proportional packing was
+ * tighter, but with 1 at 4px against 7px for the rest the whole time shifted
+ * whenever a 1 came or went, which read as the display wobbling.
+ *
+ * Two 7px cells and a 2px gap come to exactly the panel's 16.
  */
 void buildTimeMask(uint8_t *mask, int hours, int minutes);
 
@@ -128,9 +137,6 @@ void buildTimeMask(uint8_t *mask, int hours, int minutes);
  * from the stock bitmaps, so it carries shading.
  */
 void buildWeatherMask(uint8_t *mask, int temperatureC, int icon);
-
-/** The moon, filling the panel. */
-void buildMoonMask(uint8_t *mask, double illumination, bool waxing);
 
 /** Paint an image onto the screen. `scale` dims the whole thing: 255 is full. */
 void paintMask(const uint8_t *mask, uint8_t scale);

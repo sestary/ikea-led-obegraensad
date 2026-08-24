@@ -2,7 +2,6 @@
 #include "config.h"
 
 #include <algorithm>
-#include <cstring>
 #include <vector>
 
 #ifdef SIMULATOR
@@ -138,16 +137,6 @@ bool WeatherStore::fetch()
   WeatherReading out;
   out.temperatureC = round(doc["current_condition"][0]["temp_C"].as<float>());
   out.icon = iconForCode(doc["current_condition"][0]["weatherCode"].as<int>());
-
-  // wttr.in reports illumination as a percentage and the phase as a name; the
-  // name is only needed to tell a waxing moon from a waning one.
-  const int illum = doc["weather"][0]["astronomy"][0]["moon_illumination"].as<int>();
-  out.moonIllumination = (illum < 0 ? 0 : (illum > 100 ? 100 : illum)) / 100.0;
-
-  const String phase = doc["weather"][0]["astronomy"][0]["moon_phase"].as<String>();
-  // strstr, not find/npos: Arduino's String has neither, and the simulator
-  // aliases String to std::string, so only the C string API compiles on both.
-  out.moonWaxing = strstr(phase.c_str(), "Waning") == nullptr;
 
   out.valid = true;
   reading_ = out;
