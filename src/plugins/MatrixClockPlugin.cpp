@@ -70,6 +70,21 @@ bool MatrixClockPlugin::holdComplete(unsigned long elapsed) const
     return false;
   }
 
+  // Nothing to change to. Leaving here would dissolve the scene and rebuild the
+  // very same one - which is what the time did several times over between :45
+  // and :00 whenever there was no reading to switch to.
+  if (chooseNextScene() == scene)
+  {
+    return false;
+  }
+
+  // A press wins over the schedule for its own spell, then the wall clock takes
+  // over again.
+  if (buttonHeld)
+  {
+    return elapsed >= BUTTON_HOLD_MS;
+  }
+
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 10))
   {
@@ -85,12 +100,18 @@ bool MatrixClockPlugin::holdComplete(unsigned long elapsed) const
 
 bool MatrixClockPlugin::buttonPressed()
 {
-  int next = (scene + 1) % SCENE_COUNT;
+  const int next = (scene + 1) % SCENE_COUNT;
   if (next == SCENE_WEATHER && !weatherStore.hasData())
   {
-    next = SCENE_TIME;
+    // Nothing to switch to. Still consumed, so the lamp does not change plugin
+    // underneath us, but the panel is left alone: falling back to the time here
+    // dissolved the clock and rained the very same screen back in, so a few
+    // presses looked like the time reloading over and over.
+    return true;
   }
+
   startScene(next);
+  buttonHeld = true;
   return true;
 }
 
@@ -104,6 +125,7 @@ void MatrixClockPlugin::startScene(int nextScene)
   }
 
   scene = nextScene;
+  buttonHeld = false;
   std::memset(locked, 0, sizeof(locked));
 
   // The dissolve ends on a deadline, so pixels can still be mid-fall when it

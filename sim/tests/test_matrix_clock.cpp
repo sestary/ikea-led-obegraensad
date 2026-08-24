@@ -47,16 +47,12 @@ static void test_time_mask_is_flush_top_and_bottom() {
   CHECK(bottomRow); // minutes reach row 15
 }
 
-// The time is set monospace: every digit advances by the widest of the ten
-// (7px) with TIME_GAP blank columns between, so two cells and the gap come to
-// exactly the panel's 16 and the digits never move as the time changes.
-//
-// That fixes the cells at [0,6] and [9,15], which leaves columns 7 and 8 clear
-// whatever the digits are - an assertion proportional packing could not meet,
-// since there the row width, and so every digit's position, moved with the
-// digits being shown.
-static constexpr int TIME_GAP = 2;
-static constexpr int TIME_CELL = 7;
+// Each digit is centred in its own half of the panel, so the cells are [0,7]
+// and [8,15] and a digit's position depends only on which half it is in - not
+// on which digits are showing, which is what stops the time shifting as the
+// minutes tick. Proportional packing could not manage that: there the row width
+// and every digit's position moved with the digits.
+static constexpr int TIME_CELL = COLS / 2;
 static void test_time_digits_are_monospaced() {
   const int times[][2] = {{11, 38}, {23, 59}, {10, 8}, {11, 11}, {0, 0}};
 
@@ -68,25 +64,16 @@ static void test_time_digits_are_monospaced() {
     for (int half = 0; half < 2; half++) {
       const int value = t[half];
       const int digits[2] = {value / 10, value % 10};
-      const int cellStart[2] = {0, TIME_CELL + TIME_GAP};
 
-      // The gap columns stay clear however the digits are set.
-      for (int y = 0; y < ROWS; y++) {
-        if ((y < ROWS / 2) != (half == 0))
-          continue;
-        for (int x = TIME_CELL; x < TIME_CELL + TIME_GAP; x++)
-          CHECK_EQ(mask[y * COLS + x], 0);
-      }
-
-      // And each digit sits centred inside its own cell.
       for (int d = 0; d < 2; d++) {
         Glyph g = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {digits[d]}); });
+        const int cellStart = d * TIME_CELL;
 
         int lo = COLS, hi = -1;
         for (int y = 0; y < ROWS; y++) {
           if ((y < ROWS / 2) != (half == 0))
             continue;
-          for (int x = cellStart[d]; x < cellStart[d] + TIME_CELL; x++)
+          for (int x = cellStart; x < cellStart + TIME_CELL; x++)
             if (mask[y * COLS + x]) {
               if (x < lo)
                 lo = x;
@@ -94,9 +81,15 @@ static void test_time_digits_are_monospaced() {
                 hi = x;
             }
         }
+
         CHECK(hi >= 0);
+        // The whole digit is inside its own half...
         CHECK_EQ(hi - lo + 1, g.width);
-        CHECK_EQ(lo, cellStart[d] + (TIME_CELL - g.width) / 2);
+        // ...and centred there, which is what fixes its position. The odd
+        // column rounds outwards, so a matched pair sits centred on the panel.
+        const int want = (d == 0) ? (TIME_CELL - g.width) / 2
+                                  : (TIME_CELL - g.width + 1) / 2;
+        CHECK_EQ(lo, cellStart + want);
       }
     }
   }
@@ -482,6 +475,67 @@ static void test_time_dominates_the_cycle() {
 
 // The button steps the screens in order, so it is predictable by hand even
 // though the automatic picker is weighted and random.
+// Step the simulated clock to a given wall second, so a test can sit somewhere
+// definite in the schedule.
+static void alignSecond(int target) {
+  struct tm t;
+  for (int i = 0; i < 2000; i++) {
+    getLocalTime(&t);
+    if (t.tm_sec == target)
+      return;
+    simClockStep(50);
+  }
+}
+
+// A press has to outlast the schedule. The weather's own window is :45 to :00,
+// so pressing at :05 used to put it up and have the wall clock pull it straight
+// back off one MIN_HOLD later - the press looked like it did nothing.
+static void test_button_holds_the_weather() {
+  simSetWeather(21, 113);
+  alignSecond(5);
+
+  Plugin *p = matrixClock();
+  pluginManager.setActivePluginById(p->getId());
+  pluginManager.setupActivePlugin();
+
+  uint8_t weatherMask[TOTAL_PIXELS];
+  std::memset(weatherMask, 0, sizeof(weatherMask));
+  buildWeatherMask(weatherMask, 21, 2);
+
+  CHECK(p->buttonPressed());
+
+  int firstShown = -1;
+  bool stillUpLater = false, handedBack = false;
+
+  for (int i = 0; i < 500; i++) { // 25s at 50ms
+    pluginManager.runActivePlugin();
+    simRenderTick();
+    SimFrame f = simLatestFrame();
+
+    int hits = 0, need = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (weatherMask[j] > 0) {
+        need++;
+        if (f.px[j] == weatherMask[j])
+          hits++;
+      }
+    const bool showing = need > 0 && hits == need;
+
+    if (showing && firstShown < 0)
+      firstShown = i;
+    if (firstShown >= 0 && i == firstShown + 160) // 8s after it assembled
+      stillUpLater = showing;
+    if (firstShown >= 0 && i == firstShown + 320) // 16s, well past the spell
+      handedBack = !showing;
+
+    simClockStep(50);
+  }
+
+  CHECK(firstShown >= 0);
+  CHECK(stillUpLater); // the schedule would have cut it at 1.5s
+  CHECK(handedBack);   // and the clock comes back afterwards
+}
+
 static void test_button_steps_through_the_screens() {
   simSetWeather(21, 113);
   Plugin *p = matrixClock();
@@ -535,6 +589,7 @@ int main() {
   RUN(test_an_interlude_follows_the_clock);
   RUN(test_runs_without_weather_data);
   RUN(test_time_dominates_the_cycle);
+  RUN(test_button_holds_the_weather);
   RUN(test_button_steps_through_the_screens);
   RUN(test_other_plugins_do_not_consume_the_button);
   RUN(test_dissolve_drops_fall_visibly);

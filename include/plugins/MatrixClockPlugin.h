@@ -59,10 +59,18 @@ private:
   // dissolve again immediately, which reads as a glitch rather than a change.
   static constexpr uint32_t MIN_HOLD_MS = 1500;
 
+  // A press asks for the weather now, so it has to survive the schedule: the
+  // wall clock would otherwise pull the panel straight back to the time, since
+  // outside :45 to :00 the weather's window is not open.
+  static constexpr uint32_t BUTTON_HOLD_MS = 10000;
+
   // Fallbacks for a device that has not reached an NTP server yet: with no
   // wall second to pin to, the scenes just take turns.
   static constexpr uint32_t HOLD_TIME_MS = 30000;
   static constexpr uint32_t HOLD_INTERLUDE_MS = 8000;
+
+  // Set by a press, cleared whenever a scene starts.
+  bool buttonHeld = false;
 
   static constexpr uint8_t RAIN_BRIGHTNESS = 90;
   static constexpr uint8_t MAX_TRAIL_LENGTH = 6;

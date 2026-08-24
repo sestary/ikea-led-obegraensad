@@ -10,11 +10,6 @@ namespace
 constexpr int WEATHER_GAP = 2;
 // Blank columns between temperature glyphs.
 constexpr int TEMP_GAP = 1;
-// Blank columns between the big time digits. Two rather than one: the big
-// digits are 7px wide, so a single column reads as cramped, and the widest pair
-// would span 15px and sit on lopsided 0/1 margins. At 2 the widest pair is
-// exactly 16px and fills the panel evenly.
-constexpr int TIME_GAP = 2;
 // The stock minusSymbol is 4px and reads heavy next to the small digits.
 constexpr int MINUS_WIDTH = 2;
 // Rows the weather artwork is drawn into, above the temperature.
@@ -40,33 +35,6 @@ Glyph digitGlyph(int digit)
 Glyph bigDigitGlyph(int digit)
 {
   return captureGlyph([&] { Screen.drawBigNumbers(0, 0, {digit}); });
-}
-
-/**
- * The monospace advance for the big digits: the widest of the ten.
- *
- * Measured across the whole set, not across the digits being shown, because
- * that is what makes the setting monospace - a cell sized to the digits present
- * would still shift when the minutes tick from 19 to 20.
- *
- * Cached: each probe clears and repaints the screen, and this is asked for on
- * every scene build.
- */
-int bigDigitCell()
-{
-  static int cell = 0;
-  if (cell == 0)
-  {
-    for (int digit = 0; digit <= 9; digit++)
-    {
-      const int width = bigDigitGlyph(digit).width;
-      if (width > cell)
-      {
-        cell = width;
-      }
-    }
-  }
-  return cell;
 }
 
 Glyph degreeGlyph()
@@ -176,27 +144,23 @@ void composeRow(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int g
   }
 }
 
-void composeRowFixed(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap, int cell)
+void composeTimePair(uint8_t *mask, const Glyph &left, const Glyph &right, int y)
 {
-  const int count = static_cast<int>(items.size());
-  const int total = count > 0 ? (count * cell + (count - 1) * gap) : 0;
-  const int blockHeight = tallest(items);
-
-  int x = (COLS - total) / 2;
-  if (x < 0)
-  {
-    x = 0;
-  }
-
-  for (const auto &item : items)
-  {
-    const int dy = (item.align == GLYPH_TOP) ? 0 : (blockHeight - item.glyph.height) / 2;
-    // Centre the ink in its cell, so a narrow 1 sits under the digit it
-    // replaced rather than hard against the cell's left edge.
-    const int dx = (cell - item.glyph.width) / 2;
-    blitGlyph(mask, item.glyph, x + dx, y + dy);
-    x += cell + gap;
-  }
+  // Each digit owns half the panel and is centred in its own half, so its
+  // position depends only on which half it is in - never on which digits are
+  // showing, which is what keeps the time from shifting as the minutes tick.
+  //
+  // 1 is 4px against 7px for the rest, so it sits with visible space either
+  // side of it. That is what centring on a fixed grid means; anchoring it to an
+  // edge instead would push the pair off-centre on the panel.
+  // The spare column: a 7px digit in an 8px half leaves one over, and always
+  // rounding the same way would park both digits' slack on the same side and
+  // shift the pair off centre. Rounded outwards instead - left half toward the
+  // left, right half toward the right - so an evenly matched pair sits exactly
+  // centred with the slack split between the two outer margins.
+  const int cell = COLS / 2;
+  blitGlyph(mask, left, (cell - left.width) / 2, y);
+  blitGlyph(mask, right, cell + (cell - right.width + 1) / 2, y);
 }
 
 void buildTimeMask(uint8_t *mask, int hours, int minutes)
@@ -206,9 +170,8 @@ void buildTimeMask(uint8_t *mask, int hours, int minutes)
   const std::vector<GlyphItem> mm = {{bigDigitGlyph(minutes / 10), GLYPH_TOP},
                                      {bigDigitGlyph(minutes % 10), GLYPH_TOP}};
 
-  const int cell = bigDigitCell();
-  composeRowFixed(mask, hh, 0, TIME_GAP, cell);
-  composeRowFixed(mask, mm, ROWS - tallest(mm), TIME_GAP, cell);
+  composeTimePair(mask, hh[0].glyph, hh[1].glyph, 0);
+  composeTimePair(mask, mm[0].glyph, mm[1].glyph, ROWS - tallest(mm));
 }
 
 void buildWeatherMask(uint8_t *mask, int temperatureC, int icon)
