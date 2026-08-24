@@ -47,14 +47,18 @@ static void test_time_mask_is_flush_top_and_bottom() {
   CHECK(bottomRow); // minutes reach row 15
 }
 
-// The time is packed proportionally: digits sit TIME_GAP blank columns apart
-// and each row is centred. The gap is 2 rather than 1 because the big digits
-// are 7px wide - a single column between them reads as cramped, and the widest
-// pair then spans 15px, leaving lopsided 0/1 margins. At 2 the widest pair is
-// exactly 16px and fills the panel.
+// The time is set monospace: every digit advances by the widest of the ten
+// (7px) with TIME_GAP blank columns between, so two cells and the gap come to
+// exactly the panel's 16 and the digits never move as the time changes.
+//
+// That fixes the cells at [0,6] and [9,15], which leaves columns 7 and 8 clear
+// whatever the digits are - an assertion proportional packing could not meet,
+// since there the row width, and so every digit's position, moved with the
+// digits being shown.
 static constexpr int TIME_GAP = 2;
-static void test_time_digits_are_proportional() {
-  const int times[][2] = {{11, 38}, {23, 59}, {10, 8}, {26, 38}};
+static constexpr int TIME_CELL = 7;
+static void test_time_digits_are_monospaced() {
+  const int times[][2] = {{11, 38}, {23, 59}, {10, 8}, {11, 11}, {0, 0}};
 
   for (const auto &t : times) {
     uint8_t mask[TOTAL_PIXELS];
@@ -63,26 +67,37 @@ static void test_time_digits_are_proportional() {
 
     for (int half = 0; half < 2; half++) {
       const int value = t[half];
-      Glyph a = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value / 10}); });
-      Glyph b = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {value % 10}); });
-      const int wantWidth = a.width + TIME_GAP + b.width;
+      const int digits[2] = {value / 10, value % 10};
+      const int cellStart[2] = {0, TIME_CELL + TIME_GAP};
 
-      int lo = COLS, hi = -1;
+      // The gap columns stay clear however the digits are set.
       for (int y = 0; y < ROWS; y++) {
         if ((y < ROWS / 2) != (half == 0))
           continue;
-        for (int x = 0; x < COLS; x++)
-          if (mask[y * COLS + x]) {
-            if (x < lo)
-              lo = x;
-            if (x > hi)
-              hi = x;
-          }
+        for (int x = TIME_CELL; x < TIME_CELL + TIME_GAP; x++)
+          CHECK_EQ(mask[y * COLS + x], 0);
       }
-      CHECK(hi >= 0);
-      CHECK_EQ(hi - lo + 1, wantWidth);
-      // Centred, allowing one pixel where the leftover space is odd.
-      CHECK(abs(lo - (COLS - 1 - hi)) <= 1);
+
+      // And each digit sits centred inside its own cell.
+      for (int d = 0; d < 2; d++) {
+        Glyph g = captureGlyph([&] { Screen.drawBigNumbers(0, 0, {digits[d]}); });
+
+        int lo = COLS, hi = -1;
+        for (int y = 0; y < ROWS; y++) {
+          if ((y < ROWS / 2) != (half == 0))
+            continue;
+          for (int x = cellStart[d]; x < cellStart[d] + TIME_CELL; x++)
+            if (mask[y * COLS + x]) {
+              if (x < lo)
+                lo = x;
+              if (x > hi)
+                hi = x;
+            }
+        }
+        CHECK(hi >= 0);
+        CHECK_EQ(hi - lo + 1, g.width);
+        CHECK_EQ(lo, cellStart[d] + (TIME_CELL - g.width) / 2);
+      }
     }
   }
 }
@@ -185,53 +200,8 @@ static void test_temperature_is_centred() {
   CHECK(abs(leftMargin - rightMargin) <= 1);
 }
 
-// The moon is the reason the pipeline is 8-bit: a hard mask leaves the limb
-// and terminator stepped.
-static void test_moon_uses_many_shades() {
-  uint8_t mask[TOTAL_PIXELS];
-  std::memset(mask, 0, sizeof(mask));
-  buildMoonMask(mask, 0.62, true);
-
-  bool seen[256] = {false};
-  int distinct = 0;
-  for (int i = 0; i < TOTAL_PIXELS; i++)
-    if (mask[i] > 0 && !seen[mask[i]]) {
-      seen[mask[i]] = true;
-      distinct++;
-    }
-  CHECK(distinct > 8);
-}
-
-// A new moon must not be a blank panel: the unlit face is drawn faintly so the
-// whole disc stays visible.
-static void test_new_moon_still_shows_the_disc() {
-  uint8_t mask[TOTAL_PIXELS];
-  std::memset(mask, 0, sizeof(mask));
-  buildMoonMask(mask, 0.01, true);
-
-  int lit = 0;
-  for (int i = 0; i < TOTAL_PIXELS; i++)
-    if (mask[i] > 0)
-      lit++;
-  CHECK(lit > 100); // a disc, not a sliver
-}
-
-// The disc must not touch the panel edges, or a full moon reads as a blob
-// filling the panel rather than a circle.
-static void test_moon_leaves_a_margin() {
-  uint8_t mask[TOTAL_PIXELS];
-  std::memset(mask, 0, sizeof(mask));
-  buildMoonMask(mask, 1.0, true);
-
-  for (int x = 0; x < COLS; x++) {
-    CHECK_EQ((int)mask[x], 0);                          // top row clear
-    CHECK_EQ((int)mask[(ROWS - 1) * COLS + x], 0);      // bottom row clear
-  }
-}
-
-// --- plugin ----------------------------------------------------------------
-
-// The deadline guarantee: however the rain falls, the scene must complete.
+// A stream might never cross a given pixel, so the scene completes on a
+// deadline as well as on every target locking.
 static void test_scene_completes_by_the_deadline() {
   Plugin *p = matrixClock();
   CHECK(p != nullptr);
@@ -240,19 +210,22 @@ static void test_scene_completes_by_the_deadline() {
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
 
-  // 2500ms rain-in deadline, ticking at 50ms.
+  // Captured now, not after the loop: the scene's target is built once when the
+  // scene starts, and the rain-in window is long enough for the minute to roll
+  // underneath it.
+  uint8_t mask[TOTAL_PIXELS];
+  std::memset(mask, 0, sizeof(mask));
+  struct tm t;
+  getLocalTime(&t);
+  buildTimeMask(mask, t.tm_hour, t.tm_min);
+
+  // Rain-in deadline, ticking at 50ms.
   for (int i = 0; i < 80; i++) {
     pluginManager.runActivePlugin();
     simClockStep(50);
   }
   pluginManager.runActivePlugin();
   simRenderTick();
-
-  uint8_t mask[TOTAL_PIXELS];
-  std::memset(mask, 0, sizeof(mask));
-  struct tm t;
-  getLocalTime(&t);
-  buildTimeMask(mask, t.tm_hour, t.tm_min);
 
   SimFrame f = simLatestFrame();
   int expected = 0, present = 0;
@@ -266,36 +239,82 @@ static void test_scene_completes_by_the_deadline() {
   CHECK_EQ(present, expected);
 }
 
+// The streams must drain off the bottom rather than blink out mid-panel. The
+// hold hides the rain, and cutting it the instant the image finished locking
+// left a full screen of rain vanishing in one frame.
+//
+// Measured as the rain's pixel count in the last frame that had any: draining
+// leaves a thinning tail, whereas cutting it strands a full panel. The lowest
+// lit row is no use here - with every column raining, something is near the
+// bottom in almost any frame.
+static void test_rain_drains_instead_of_vanishing() {
+  Plugin *p = matrixClock();
+  pluginManager.setActivePluginById(p->getId());
+  pluginManager.setupActivePlugin();
+
+  bool sawRain = false;
+  int lastRainCount = -1;
+  int peakRainCount = 0;
+  int rainAtCut = -1;
+
+  for (int i = 0; i < 400; i++) {
+    pluginManager.runActivePlugin();
+    simRenderTick();
+    SimFrame f = simLatestFrame();
+
+    // The time scene draws at full brightness, so anything at or below the
+    // rain's ceiling is rain.
+    int rain = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++) {
+      const uint8_t v = f.px[j];
+      if (v > 0 && v <= 90)
+        rain++;
+    }
+
+    if (rain > 0) {
+      sawRain = true;
+      lastRainCount = rain;
+      if (rain > peakRainCount)
+        peakRainCount = rain;
+    } else if (sawRain) {
+      rainAtCut = lastRainCount;
+      break;
+    }
+
+    simClockStep(50);
+  }
+
+  CHECK(sawRain);
+  CHECK(rainAtCut >= 0);
+  CHECK(peakRainCount > 20);           // the rain really did fill the panel
+  CHECK(rainAtCut * 4 < peakRainCount); // and had thinned right out before it went
+}
+
 static void test_an_interlude_follows_the_clock() {
   simSetWeather(21, 113);
   Plugin *p = matrixClock();
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
 
-  uint8_t weatherMask[TOTAL_PIXELS], moonMask[TOTAL_PIXELS];
+  uint8_t weatherMask[TOTAL_PIXELS];
   std::memset(weatherMask, 0, sizeof(weatherMask));
-  std::memset(moonMask, 0, sizeof(moonMask));
   buildWeatherMask(weatherMask, 21, 2);
-  buildMoonMask(moonMask, simMoonIllumination() / 100.0, true);
 
-  // The picker is weighted, so which interlude comes up is not fixed - only
-  // that one does. One round is 30s clock plus 8s interlude.
+  // The weather takes over at :45, so a full minute of ticks must show it.
   bool sawInterlude = false;
-  for (int i = 0; i < 1200 && !sawInterlude; i++) {
+  for (int i = 0; i < 2000 && !sawInterlude; i++) {
     pluginManager.runActivePlugin();
     simRenderTick();
     SimFrame f = simLatestFrame();
-    for (const uint8_t *m : {weatherMask, moonMask}) {
-      int hits = 0, need = 0;
-      for (int j = 0; j < TOTAL_PIXELS; j++)
-        if (m[j] > 0) {
-          need++;
-          if (f.px[j] == m[j])
-            hits++;
-        }
-      if (need > 0 && hits == need)
-        sawInterlude = true;
-    }
+    int hits = 0, need = 0;
+    for (int j = 0; j < TOTAL_PIXELS; j++)
+      if (weatherMask[j] > 0) {
+        need++;
+        if (f.px[j] == weatherMask[j])
+          hits++;
+      }
+    if (need > 0 && hits == need)
+      sawInterlude = true;
     simClockStep(50);
   }
   CHECK(sawInterlude);
@@ -422,6 +441,19 @@ static void test_time_dominates_the_cycle() {
   pluginManager.setActivePluginById(p->getId());
   pluginManager.setupActivePlugin();
 
+  // Align to the top of a minute. Scenes are pinned to the wall clock now, and
+  // one captured mask is only valid while the displayed minute holds - so the
+  // window has to be a single minute, measured from its start.
+  struct tm t;
+  for (int i = 0; i < 1200; i++) {
+    getLocalTime(&t);
+    if (t.tm_sec == 0)
+      break;
+    pluginManager.runActivePlugin();
+    simClockStep(50);
+  }
+  CHECK_EQ(t.tm_sec, 0);
+
   uint8_t timeMask[TOTAL_PIXELS];
   timeMaskNow(timeMask);
   int timeTotal = 0;
@@ -430,8 +462,8 @@ static void test_time_dominates_the_cycle() {
       timeTotal++;
 
   int timeFrames = 0, frames = 0;
-  // Several full rounds: 30s clock plus 8s interlude, at 50ms a tick.
-  for (int i = 0; i < 4000; i++) {
+  // 59 seconds at 50ms a tick: the whole minute bar the roll into the next.
+  for (int i = 0; i < 1180; i++) {
     pluginManager.runActivePlugin();
     simRenderTick();
     SimFrame f = simLatestFrame();
@@ -494,14 +526,12 @@ static void test_other_plugins_do_not_consume_the_button() {
 int main() {
   Screen.setup();
   RUN(test_time_mask_is_flush_top_and_bottom);
-  RUN(test_time_digits_are_proportional);
+  RUN(test_time_digits_are_monospaced);
   RUN(test_negative_temperature_keeps_every_glyph);
   RUN(test_weather_mask_keeps_two_row_gap_for_every_icon);
   RUN(test_temperature_is_centred);
-  RUN(test_moon_uses_many_shades);
-  RUN(test_new_moon_still_shows_the_disc);
-  RUN(test_moon_leaves_a_margin);
   RUN(test_scene_completes_by_the_deadline);
+  RUN(test_rain_drains_instead_of_vanishing);
   RUN(test_an_interlude_follows_the_clock);
   RUN(test_runs_without_weather_data);
   RUN(test_time_dominates_the_cycle);

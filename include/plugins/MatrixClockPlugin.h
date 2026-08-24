@@ -22,6 +22,10 @@ private:
   enum Phase
   {
     PHASE_RAIN_IN,
+    // The image is complete but the rain is still on screen. Cutting it the
+    // instant the last pixel locked left the streams vanishing in mid-fall, so
+    // they run off the bottom edge first and the panel is clean before it holds.
+    PHASE_DRAIN,
     PHASE_HOLD,
     PHASE_DISSOLVE
   };
@@ -30,7 +34,6 @@ private:
   {
     SCENE_TIME,
     SCENE_WEATHER,
-    SCENE_MOON,
     SCENE_COUNT
   };
 
@@ -42,13 +45,24 @@ private:
   static constexpr uint16_t RAIN_IN_MAX_MS = 3750;
   static constexpr uint16_t DISSOLVE_MS = 1800;
 
-  // The clock is the resident screen; weather and the moon are interludes. At
-  // these holds the time is up roughly four fifths of the time.
+  // Long enough for the slowest stream to clear a full panel height, with room
+  // to spare: a backstop, not the usual way out of the drain.
+  static constexpr uint16_t DRAIN_MAX_MS = 2000;
+
+  // Scene changes are pinned to the wall clock rather than free-running: the
+  // time holds from :00, hands over to the weather at :45, and comes back on
+  // the minute. So the clock is always correct the instant it reassembles,
+  // instead of drifting into view at some arbitrary point in the minute.
+  static constexpr int WEATHER_AT_SECOND = 45;
+
+  // A scene that finished assembling just past a boundary would otherwise
+  // dissolve again immediately, which reads as a glitch rather than a change.
+  static constexpr uint32_t MIN_HOLD_MS = 1500;
+
+  // Fallbacks for a device that has not reached an NTP server yet: with no
+  // wall second to pin to, the scenes just take turns.
   static constexpr uint32_t HOLD_TIME_MS = 30000;
   static constexpr uint32_t HOLD_INTERLUDE_MS = 8000;
-
-  // Out of ten interludes, how many are weather rather than the moon.
-  static constexpr int WEATHER_SHARE = 7;
 
   static constexpr uint8_t RAIN_BRIGHTNESS = 90;
   static constexpr uint8_t MAX_TRAIL_LENGTH = 6;
@@ -89,12 +103,13 @@ private:
 
   void startScene(int nextScene);
   int chooseNextScene() const;
-  uint32_t holdDuration() const;
+  bool holdComplete(unsigned long elapsed) const;
   void buildTarget();
   void resetColumn(int index, bool startAbove);
   void advanceRain();
   void lockCrossedPixels();
   bool allTargetsLocked() const;
+  bool rainDrained() const;
   void lockEverything();
   void scheduleDissolve();
   void releaseLocked(unsigned long elapsed);
