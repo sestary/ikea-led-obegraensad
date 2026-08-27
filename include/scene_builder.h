@@ -113,11 +113,12 @@ void blitGlyph(uint8_t *mask, const Glyph &glyph, int x, int y);
 void composeRow(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap);
 
 /**
- * As composeRow, but every glyph advances by a fixed `cell` and is centred
- * within it. Monospace: the row's width no longer depends on which glyphs are
- * in it.
+ * Two digits, each centred in its own half of the panel.
+ *
+ * A digit's position depends only on which half it occupies, never on which
+ * digits are showing, so the value does not shift as it changes.
  */
-void composeRowFixed(uint8_t *mask, const std::vector<GlyphItem> &items, int y, int gap, int cell);
+void composeTimePair(uint8_t *mask, const Glyph &left, const Glyph &right, int y);
 
 /**
  * Hours across the top, minutes flush to the bottom edge.
